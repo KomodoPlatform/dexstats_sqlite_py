@@ -240,17 +240,17 @@ def trades_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
     sql_coursor = conn.cursor()
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_coursor, pair, timestamp_24h_ago)
+    swaps_for_pair = get_swaps_since_timestamp_for_pair(sql_coursor, pair, 0)
     trades_info = []
-    for swap_status in swaps_for_pair_24h:
+    for swap_status in swaps_for_pair:
         trade_info = OrderedDict()
-        trade_info["trade_id"] = swap_status["uuid"]
+        trade_info["id"] = swap_status["uuid"]
         trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
-        trade_info["base_volume"] = swap_status["maker_amount"]
-        trade_info["quote_volume"] = swap_status["taker_amount"]
+        trade_info["amount"] = swap_status["maker_amount"]
+        trade_info["amount_quote"] = swap_status["taker_amount"]
         trade_info["timestamp"] = swap_status["started_at"]
-        trade_info["type"] = swap_status["trade_type"]
+        trade_info["side"] = swap_status["trade_type"]
+        trade_info["raw"] = swap_status
         trades_info.append(trade_info)
     conn.close()
     return trades_info

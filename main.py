@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from stats_utils import get_availiable_pairs, market_summary
+from stats_utils import get_availiable_pairs, market_summary, trades_for_pair
 
 path_to_db = 'MM2.db'
 app = FastAPI()
@@ -42,8 +42,13 @@ def markets():
      for pair in available_pairs:
          summary_data.append(market_summary(pair))
      return summary_data
-#
-#
+
+
+@app.get('/api/v1/trades/{market_pair}')
+def trades(market_pair="KMD_BTC"):
+    trades_data = trades_for_pair(market_pair, path_to_db)
+    return trades_data
+
 # @app.get('/api/v1/ticker')
 # def ticker():
 #     available_pairs = get_availiable_pairs(path_to_db)
@@ -59,10 +64,7 @@ def markets():
 #     return orderbook_data
 #
 #
-# @app.get('/api/v1/trades/{market_pair}')
-# def trades(market_pair="KMD_BTC"):
-#     trades_data = trades_for_pair(market_pair, path_to_db)
-#     return trades_data
+
 #
 #
 # @app.get('/api/v1/atomicdexio')
