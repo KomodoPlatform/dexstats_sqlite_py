@@ -194,6 +194,15 @@ def summary_for_pair(pair, path_to_db):
     conn.close()
     return pair_summary
 
+def market_summary(pair):
+    market_summary = OrderedDict({
+        "id": pair[0] + "_" + pair[1],
+        "type": "spot",
+        "base": pair[0],
+        "quote": pair[1]
+    })
+    return market_summary
+
 # TICKER Endpoint
 def ticker_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)

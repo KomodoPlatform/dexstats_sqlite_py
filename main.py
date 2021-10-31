@@ -34,15 +34,14 @@ def info():
     }
     return exchange_info
 
-# available_pairs = get_availiable_pairs(path_to_db)
-#
-# @app.get('/api/v1/summary')
-# def summary():
-#     available_pairs = get_availiable_pairs(path_to_db)
-#     summary_data = []
-#     for pair in available_pairs:
-#         summary_data.append(summary_for_pair(pair, path_to_db))
-#     return summary_data
+
+@app.get('/api/v1/markets')
+def markets():
+     available_pairs = get_availiable_pairs(path_to_db)
+     summary_data = []
+     for pair in available_pairs:
+         summary_data.append(market_summary(pair))
+     return summary_data
 #
 #
 # @app.get('/api/v1/ticker')
