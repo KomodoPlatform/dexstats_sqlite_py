@@ -45,14 +45,14 @@ def get_markets():
 
 
 # TODO: add slicing by trade id
-@app.get('/api/v1/trades/{market_pair}')
-def get_trades(market_pair="KMD_BTC"):
+@app.get('/api/v1/trades/')
+def get_trades(market_pair: str = "KMD_BTC"):
     trades_data = trades_for_pair(market_pair, path_to_db)
     return trades_data
 
 
-@app.get('/api/v1/orders/snapshot/{market_pair}')
-def orderbook_snapshot(market_pair="KMD_BTC"):
+@app.get('/api/v1/orders/snapshot/')
+def orderbook_snapshot(market_pair: str = "KMD_BTC"):
     orderbook_data = orderbook_for_pair(market_pair)
     return orderbook_data
 
