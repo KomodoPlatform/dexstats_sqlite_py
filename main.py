@@ -25,11 +25,11 @@ def info():
         "twitter": "https://twitter.com/atomicdex",
         "version": "2.0",
         "capability": {
-            "markets": true,
-            "trades": true,
-            "ordersSnapshot": true,
-            "candles": true,
-            "ticker": true
+            "markets": True,
+            "trades": True,
+            "ordersSnapshot": True,
+            "candles": True,
+            "ticker": True
             }
     }
     return exchange_info
