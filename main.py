@@ -28,8 +28,6 @@ def get_exchange_info():
             "markets": True,
             "trades": True,
             "ordersSnapshot": True,
-            "candles": True,
-            "ticker": True
             }
     }
     return exchange_info
