@@ -249,7 +249,7 @@ def trades_for_pair(pair, path_to_db):
         trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
         trade_info["amount"] = swap_status["maker_amount"]
         trade_info["amount_quote"] = swap_status["taker_amount"]
-        trade_info["timestamp"] = swap_status["started_at"]
+        trade_info["timestamp"] = datetime.utcfromtimestamp(int(swap_status["started_at"])).strftime('%Y-%m-%dT%H:%M:%SZ')
         trade_info["side"] = swap_status["trade_type"]
         trade_info["raw"] = swap_status
         trades_info.append(trade_info)
