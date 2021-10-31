@@ -83,7 +83,9 @@ def get_mm2_orderbook_for_pair(pair):
               'rel': pair[1]
              }
     r = requests.post(mm2_host, json=params)
-    return json.loads(r.text)
+    orderbook = json.loads(r.text)
+    orderbook["timestamp"] = datetime.utcfromtimestamp(int(orderbook["timestamp"])).isoformat(timespec='milliseconds')
+    return orderbook
 
 
 # list -> string
