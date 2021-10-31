@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from stats_utils import get_availiable_pairs, market_summary, trades_for_pair
+from stats_utils import get_availiable_pairs, market_summary, trades_for_pair, orderbook_for_pair
 
 path_to_db = 'MM2.db'
 app = FastAPI()
@@ -15,7 +15,7 @@ app.add_middleware(
 )
 
 @app.get('/api/v1/info')
-def info():
+def get_exchange_info():
     exchange_info = {
         "name": "AtomicDEX",
         "description": "The decentralized exchange on AtomicDEX uses P2P order books powered by atomic swaps that enable the transfer of cryptocurrency from one party to another, without the use of a third-party intermediary.",
@@ -36,7 +36,7 @@ def info():
 
 
 @app.get('/api/v1/markets')
-def markets():
+def get_markets():
      available_pairs = get_availiable_pairs(path_to_db)
      summary_data = []
      for pair in available_pairs:
@@ -44,33 +44,18 @@ def markets():
      return summary_data
 
 
+# TODO: add slicing by trade id
 @app.get('/api/v1/trades/{market_pair}')
-def trades(market_pair="KMD_BTC"):
+def get_trades(market_pair="KMD_BTC"):
     trades_data = trades_for_pair(market_pair, path_to_db)
     return trades_data
 
-# @app.get('/api/v1/ticker')
-# def ticker():
-#     available_pairs = get_availiable_pairs(path_to_db)
-#     ticker_data = []
-#     for pair in available_pairs:
-#         ticker_data.append(ticker_for_pair(pair, path_to_db))
-#     return ticker_data
-#
-#
-# @app.get('/api/v1/orderbook/{market_pair}')
-# def orderbook(market_pair="KMD_BTC"):
-#     orderbook_data = orderbook_for_pair(market_pair)
-#     return orderbook_data
-#
-#
 
-#
-#
-# @app.get('/api/v1/atomicdexio')
-# def atomicdex_info_api():
-#     data = atomicdex_info(path_to_db)
-#     return data
+@app.get('/api/v1/orders/snapshot/{market_pair}')
+def orderbook_snapshot(market_pair="KMD_BTC"):
+    orderbook_data = orderbook_for_pair(market_pair)
+    return orderbook_data
+
 
 if __name__ == '__main__':
     uvicorn.run("main:app", host="0.0.0.0", port=8080)
