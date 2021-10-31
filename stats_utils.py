@@ -84,7 +84,10 @@ def get_mm2_orderbook_for_pair(pair):
              }
     r = requests.post(mm2_host, json=params)
     orderbook = json.loads(r.text)
-    orderbook["timestamp"] = datetime.utcfromtimestamp(int(orderbook["timestamp"])).isoformat(timespec='milliseconds')
+    try:
+        orderbook["timestamp"] = datetime.utcfromtimestamp(int(orderbook["timestamp"])).isoformat(timespec='milliseconds')
+    except KeyError:
+        pass
     return orderbook
 
 
