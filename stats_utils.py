@@ -234,14 +234,22 @@ def orderbook_for_pair(pair):
     return orderbook_data
 
 # Trades Endpoint
-def trades_for_pair(pair, path_to_db):
+def trades_for_pair(pair, path_to_db, since):
     pair = tuple(map(str, pair.split('_')))
     if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
         return {"error": "not valid pair"}
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
     sql_coursor = conn.cursor()
-    swaps_for_pair = get_swaps_since_timestamp_for_pair(sql_coursor, pair, 0)
+    # since is uuid of swap from which we should cut the data so we have to find timestamp of this swap
+    if since == "":
+        cut_timestamp = 0
+    else:
+        t = (pair[0],pair[1],since,)
+        sql_coursor.execute("SELECT * FROM stats_swaps WHERE maker_coin_ticker=? AND taker_coin_ticker=? AND is_success=1 AND uuid=?;", t)
+        swap_status_for_uuid = [dict(row) for row in sql_coursor.fetchall()]
+        cut_timestamp = swap_status_for_uuid[0]["started_at"]
+    swaps_for_pair = get_swaps_since_timestamp_for_pair(sql_coursor, pair, cut_timestamp)
     trades_info = []
     for swap_status in swaps_for_pair:
         trade_info = OrderedDict()
