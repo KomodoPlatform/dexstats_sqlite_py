@@ -44,7 +44,7 @@ def get_markets():
 
 # TODO: add slicing by trade id
 @app.get('/api/v1/trades')
-def get_trades(market: str = "KMD_BTC", since: uuid = ""):
+def get_trades(market: str = "KMD_BTC", since: str = ""):
     trades_data = trades_for_pair(market, path_to_db, since)
     return trades_data
 
