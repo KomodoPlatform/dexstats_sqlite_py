@@ -227,7 +227,7 @@ def orderbook_for_pair(pair):
     if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
         return {"error": "not valid pair"}
     orderbook_data = OrderedDict()
-    orderbook_data["timestamp"] = datetime.utcnow().isoformat(timespec='milliseconds')
+    orderbook_data["timestamp"] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     # TODO: maybe it'll be asked on API side? quite tricky to convert strings and sort the
     orderbook_data["bids"] = get_and_parse_orderbook(pair)[0]
     orderbook_data["asks"] = get_and_parse_orderbook(pair)[1]
