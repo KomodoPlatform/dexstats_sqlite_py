@@ -246,9 +246,9 @@ def trades_for_pair(pair, path_to_db):
     for swap_status in swaps_for_pair:
         trade_info = OrderedDict()
         trade_info["id"] = swap_status["uuid"]
-        trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
-        trade_info["amount"] = swap_status["maker_amount"]
-        trade_info["amount_quote"] = swap_status["taker_amount"]
+        trade_info["price"] = str("{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"])))
+        trade_info["amount"] = str(swap_status["maker_amount"])
+        trade_info["amount_quote"] = str(swap_status["taker_amount"])
         trade_info["timestamp"] = datetime.utcfromtimestamp(int(swap_status["started_at"])).strftime('%Y-%m-%dT%H:%M:%SZ')
         trade_info["side"] = swap_status["trade_type"]
         trade_info["raw"] = swap_status
