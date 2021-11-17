@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from stats_utils import get_availiable_pairs, market_summary, trades_for_pair, orderbook_for_pair
+from stats_utils import get_availiable_pairs, market_summary, trades_for_pair, orderbook_for_pair, get_testnet_tickers
 
 path_to_db = 'MM2.db'
 app = FastAPI()
@@ -37,12 +37,15 @@ def get_exchange_info():
 def get_markets():
      available_pairs = get_availiable_pairs(path_to_db)
      summary_data = []
+     testnet_tickers = get_testnet_tickers("0.5.3-coins.json")
      for pair in available_pairs:
-         summary_data.append(market_summary(pair))
+         if pair[0] in testnet_tickers or pair[1] in testnet_tickers:
+             pass
+         else:
+             summary_data.append(market_summary(pair))
      return summary_data
 
 
-# TODO: add slicing by trade id
 @app.get('/api/v1/trades')
 def get_trades(market: str = "KMD_BTC", since: str = ""):
     trades_data = trades_for_pair(market, path_to_db, since)
@@ -56,4 +59,4 @@ def orderbook_snapshot(market: str = "KMD_BTC"):
 
 
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=8080)
+    uvicorn.run("main:app", host="0.0.0.0", port=80, ssl_keyfile="/etc/letsencrypt/live/nomics.komodo.live/privkey.pem", ssl_certfile="/etc/letsencrypt/live/nomics.komodo.live/fullchain.pem")
