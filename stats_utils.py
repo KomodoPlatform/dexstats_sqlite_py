@@ -285,3 +285,17 @@ def atomicdex_info(path_to_db):
         "swaps_30d" : swaps_30d,
         "swaps_24h" : swaps_24h
     }
+
+
+def get_testnet_tickers(coins_filename):
+    testnet_tickers = ["RICK", "MORTY"]
+    # e.g. https://raw.githubusercontent.com/KomodoPlatform/atomicDEX-Desktop/dev/assets/config/0.5.3-coins.json
+    with open(coins_filename, "r") as file:
+        coins_json = json.load(file)
+        for coin in coins_json:
+            try:
+                if coins_json[coin]["is_testnet"] == True:
+                    testnet_tickers.append(coins_json[coin]["coin"])
+            except KeyError:
+                pass
+    return testnet_tickers
