@@ -246,21 +246,54 @@ def trades_for_pair(pair, path_to_db):
     conn.close()
     return trades_info
 
+def usd_volume_for_swap_statuses(swap_statuses):
+
+        total_usd_volume = 0
+        usd_prices = requests.get("https://prices.komodo.live:1313/api/v2/tickers").json()
+
+        for status in swap_statuses:
+            print(status)
+            try:
+                base_coin_usd_price = float(usd_prices[status["maker_coin_ticker"]]["last_price"])
+            except KeyError:
+                base_coin_usd_price = 0
+                #print("no usd price data for " + status["maker_coin_ticker"])
+            try:
+                rel_coin_usd_price  = float(usd_prices[status["taker_coin_ticker"]]["last_price"])
+            except KeyError:
+                rel_coin_usd_price = 0
+                #print("no usd price data for " + status["taker_coin_ticker"])
+            base_coin_usd_volume = base_coin_usd_price * float(status["maker_amount"])
+            quote_coin_usd_volume = rel_coin_usd_price * float(status["taker_amount"])
+            total_usd_volume += base_coin_usd_volume
+            total_usd_volume += quote_coin_usd_volume
+        return total_usd_volume
+
 # Data for atomicdex.io website
 def atomicdex_info(path_to_db):
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
     timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
     conn = sqlite3.connect(path_to_db)
+    conn.row_factory = sqlite3.Row
     sql_coursor = conn.cursor()
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE is_success=1;")
-    swaps_all_time = len(sql_coursor.fetchall())
+    swap_status_all_time = sql_coursor.fetchall()
+    swaps_all_time = len(swap_status_all_time)
+    usd_volume_all_time = usd_volume_for_swap_statuses(swap_status_all_time)
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_24h_ago,))
-    swaps_24h = len(sql_coursor.fetchall())
+    swap_statuses_24h = sql_coursor.fetchall()
+    swaps_24h = len(swap_statuses_24h)
+    usd_volume_24h = usd_volume_for_swap_statuses(swap_statuses_24h)
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_30d_ago,))
-    swaps_30d = len(sql_coursor.fetchall())
+    swap_statuses_30d = sql_coursor.fetchall()
+    swaps_30d = len(swap_statuses_30d)
+    usd_volume_30d = usd_volume_for_swap_statuses(swap_statuses_30d)
     conn.close()
     return {
         "swaps_all_time" : swaps_all_time,
+        "usd_volume_all_time" : usd_volume_all_time / 2,
         "swaps_30d" : swaps_30d,
-        "swaps_24h" : swaps_24h
+        "usd_volume_30d" : usd_volume_30d / 2,
+        "swaps_24h" : swaps_24h,
+        "usd_volume_24h" : usd_volume_24h / 2 
     }
