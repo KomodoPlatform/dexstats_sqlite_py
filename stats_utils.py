@@ -246,13 +246,11 @@ def trades_for_pair(pair, path_to_db):
     conn.close()
     return trades_info
 
-def usd_volume_for_swap_statuses(swap_statuses):
+def usd_volume_for_swap_statuses(swap_statuses, usd_prices):
 
         total_usd_volume = 0
-        usd_prices = requests.get("https://prices.komodo.live:1313/api/v2/tickers").json()
 
         for status in swap_statuses:
-            print(status)
             try:
                 base_coin_usd_price = float(usd_prices[status["maker_coin_ticker"]]["last_price"])
             except KeyError:
@@ -273,21 +271,22 @@ def usd_volume_for_swap_statuses(swap_statuses):
 def atomicdex_info(path_to_db):
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
     timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
+    usd_prices = requests.get("https://prices.komodo.live:1313/api/v2/tickers").json()
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
     sql_coursor = conn.cursor()
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE is_success=1;")
     swap_status_all_time = sql_coursor.fetchall()
     swaps_all_time = len(swap_status_all_time)
-    usd_volume_all_time = usd_volume_for_swap_statuses(swap_status_all_time)
+    usd_volume_all_time = usd_volume_for_swap_statuses(swap_status_all_time, usd_prices)
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_24h_ago,))
     swap_statuses_24h = sql_coursor.fetchall()
     swaps_24h = len(swap_statuses_24h)
-    usd_volume_24h = usd_volume_for_swap_statuses(swap_statuses_24h)
+    usd_volume_24h = usd_volume_for_swap_statuses(swap_statuses_24h, usd_prices)
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_30d_ago,))
     swap_statuses_30d = sql_coursor.fetchall()
     swaps_30d = len(swap_statuses_30d)
-    usd_volume_30d = usd_volume_for_swap_statuses(swap_statuses_30d)
+    usd_volume_30d = usd_volume_for_swap_statuses(swap_statuses_30d, usd_prices)
     conn.close()
     return {
         "swaps_all_time" : swaps_all_time,
