@@ -57,8 +57,12 @@ for pair in available_pairs:
     print("counting usd volume for " + str(pair))
     t = (timestamp_2021_start,pair[0],pair[1],)
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND maker_coin_ticker=? AND taker_coin_ticker=? AND is_success=1;", t)
-    swap_for_pair = sql_coursor.fetchall()
-    pair_usd_volume_2021 = usd_volume_for_swap_statuses(swap_for_pair, usd_prices)
+    swap_for_pair_a = sql_coursor.fetchall()
+    pair_usd_volume_2021_a = usd_volume_for_swap_statuses(swap_for_pair_a, usd_prices)
+    sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND taker_coin_ticker=? AND maker_coin_ticker=? AND is_success=1;", t)
+    swap_for_pair_b = sql_coursor.fetchall()
+    pair_usd_volume_2021_b = usd_volume_for_swap_statuses(swap_for_pair_b, usd_prices)
+    pair_usd_volume_2021 = pair_usd_volume_2021_a + pair_usd_volume_2021_b
     pairs_volumes_2021[pair[0]+"_"+pair[1]] = int(pair_usd_volume_2021)
 
 # sorting by volume
