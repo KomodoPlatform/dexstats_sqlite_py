@@ -270,7 +270,7 @@ def trades_for_pair(pair, path_to_db):
 
 def get_data_from_gecko():
     coin_ids_dict = {}
-    with open("0.5.6-coins.json", "r") as coins_json:
+    with open("coins_config.json", "r") as coins_json:
         json_data = json.load(coins_json)
         for coin in json_data:
             try:
