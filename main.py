@@ -49,12 +49,16 @@ def ticker():
 
 @app.get('/api/v1/orderbook/{market_pair}')
 def orderbook(market_pair="KMD_BTC"):
+    if len(market_pair) > 32:
+        market_pair = "KMD_BTC"
     orderbook_data = orderbook_for_pair(market_pair)
     return orderbook_data
 
 
 @app.get('/api/v1/trades/{market_pair}')
 def trades(market_pair="KMD_BTC"):
+    if len(market_pair) > 32:
+        market_pair = "KMD_BTC"
     trades_data = trades_for_pair(market_pair, path_to_db)
     return trades_data
 
