@@ -1,6 +1,6 @@
 import uvicorn
 import json
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, orderbook_for_pair, trades_for_pair, atomicdex_info, get_data_from_gecko
@@ -50,7 +50,7 @@ def ticker():
 @app.get('/api/v1/orderbook/{market_pair}')
 def orderbook(market_pair="KMD_BTC"):
     if len(market_pair) > 32:
-        market_pair = "KMD_BTC"
+        raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
     orderbook_data = orderbook_for_pair(market_pair)
     return orderbook_data
 
@@ -58,7 +58,7 @@ def orderbook(market_pair="KMD_BTC"):
 @app.get('/api/v1/trades/{market_pair}')
 def trades(market_pair="KMD_BTC"):
     if len(market_pair) > 32:
-        market_pair = "KMD_BTC"
+        raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
     trades_data = trades_for_pair(market_pair, path_to_db)
     return trades_data
 
