@@ -276,45 +276,38 @@ def reverse_string_number(string_number):
 
 
 def get_data_from_gecko():
-    coin_ids_dict = {}
-    with open("0.5.7-coins.json", "r") as coins_json:
-        json_data = json.load(coins_json)
-        for coin in json_data:
-            try:
-                coin_ids_dict[coin] = {}
-                coin_ids_dict[coin]["coingecko_id"] = json_data[coin]["coingecko_id"]
-            except KeyError as e:
-                 print(e)
-                 coin_ids_dict[coin]["coingecko_id"] = "na"
-    coin_ids = ""
-    for coin in coin_ids_dict:
-        coin_id = coin_ids_dict[coin]["coingecko_id"]
-        if coin_id != "na" and coin_id != "test-coin":
-            coin_ids += coin_id
-            coin_ids += ","
-    r = ""
+    coin_ids = []
+    gecko_prices = {}
+    with open("coins_config.json", "r") as f:
+        coins_config = json.load(f)
+
+    for coin in coins_config:
+        gecko_prices.update({coin:{"usd_price": 0}})
+        coin_id = coins_config[coin]["coingecko_id"]
+        if coin_id not in ["na", "test-coin", ""]:
+            coin_ids.append(coin_id)
+    coin_ids = ','.join(list(set(coin_ids)))
     try:
-        r = requests.get('https://api.coingecko.com/api/v3/simple/price?ids=' + coin_ids + '&vs_currencies=usd')
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_ids}&vs_currencies=usd"
+        r = requests.get(url)
     except Exception as e:
+        print(url)
+        print(e)
         return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
     gecko_data = r.json()
+
     try:
-        for coin in coin_ids_dict:
-            try:
-                coin_id = coin_ids_dict[coin]["coingecko_id"]
-            except Exception as e:
-                coin_id = "na"
-            if coin_id != "na" and coin_id != "test-coin":
-                try:
-                    coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
-                except Exception as e:
-                    coin_ids_dict[coin]["usd_price"] = 0
-            else:
-                coin_ids_dict[coin]["usd_price"] = 0
+        for coin in coins_config:
+            coin_id = coins_config[coin]["coingecko_id"]
+            if coin_id in gecko_data:
+                if "usd" in gecko_data[coin_id]:
+                    gecko_prices[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                else:
+                    print(f"{coin} coingecko id ({coin_id}) returns no price. Is it valid?")
     except Exception as e:
         print(e)
         pass
-    return coin_ids_dict
+    return gecko_prices
 
 
 def summary_for_ticker(ticker_summary, path_to_db):
@@ -428,3 +421,5 @@ def summary_ticker(path_to_db):
         if tickers_summary[summary] == {"volume_24h": 0, "trades_24h": 0}:
             tickers_summary.pop(summary)
     return tickers_summary
+
+

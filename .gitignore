@@ -1,0 +1,5 @@
+*.json
+*.json.back
+MM2.db
+__pycache__/
+
