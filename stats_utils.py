@@ -277,7 +277,7 @@ def reverse_string_number(string_number):
 
 def get_data_from_gecko():
     coin_ids_dict = {}
-    with open("0.4.0-coins.json", "r") as coins_json:
+    with open("0.5.7-coins.json", "r") as coins_json:
         json_data = json.load(coins_json)
         for coin in json_data:
             try:
@@ -300,10 +300,15 @@ def get_data_from_gecko():
     gecko_data = r.json()
     try:
         for coin in coin_ids_dict:
-            coin_id = coin_ids_dict[coin]["coingecko_id"]
-            print(coin_id)
+            try:
+                coin_id = coin_ids_dict[coin]["coingecko_id"]
+            except Exception as e:
+                coin_id = "na"
             if coin_id != "na" and coin_id != "test-coin":
-                coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                try:
+                    coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                except Exception as e:
+                    coin_ids_dict[coin]["usd_price"] = 0
             else:
                 coin_ids_dict[coin]["usd_price"] = 0
     except Exception as e:
