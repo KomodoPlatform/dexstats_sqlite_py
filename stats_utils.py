@@ -261,6 +261,7 @@ def atomicdex_info(path_to_db):
     sql_coursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_30d_ago,))
     swaps_30d = len(sql_coursor.fetchall())
     conn.close()
+
     return {
         "swaps_all_time" : swaps_all_time,
         "swaps_30d" : swaps_30d,
@@ -412,9 +413,9 @@ def summary_ticker(path_to_db):
                 tickers_summary[swap["taker_coin"]]["volume_24h"] += swap["taker_amount"]
                 tickers_summary[swap["taker_coin"]]["trades_24h"] += 1
             if swap["trade_type"] == "sell":
-                tickers_summary[swap["maker_coin"]]["volume_24h"] += swap["taker_amount"]
+                tickers_summary[swap["maker_coin"]]["volume_24h"] += swap["maker_amount"]
                 tickers_summary[swap["maker_coin"]]["trades_24h"] += 1
-                tickers_summary[swap["taker_coin"]]["volume_24h"] += swap["maker_amount"]
+                tickers_summary[swap["taker_coin"]]["volume_24h"] += swap["taker_amount"]
                 tickers_summary[swap["taker_coin"]]["trades_24h"] += 1
     conn.close()
     for summary in list(tickers_summary):
