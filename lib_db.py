@@ -4,6 +4,7 @@ import sqlite3
 from sqlite3 import Error
 import mysql.connector
 from dotenv import load_dotenv
+from lib_logger import logger
 
 load_dotenv()
 
@@ -22,9 +23,8 @@ def get_sqlite(db_file):
     conn = None
     try:
         conn = sqlite3.connect(db_file)
-        print(sqlite3.version)
     except Error as e:
-        print(e)
+        logger.error(e)
     return conn
 
 
@@ -38,7 +38,7 @@ def create_sqlite_table(conn, create_table_sql):
         c = conn.cursor()
         c.execute(create_table_sql)
     except Error as e:
-        print(e)
+        logger.error(e)
 
 
 sql_create_swaps_table = """CREATE TABLE IF NOT EXISTS swaps (
