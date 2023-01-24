@@ -1,14 +1,20 @@
 import uvicorn
 import json
+import time
+import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
+from fastapi.testclient import TestClient
 from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, orderbook_for_pair, trades_for_pair,\
     atomicdex_info, reverse_string_number, get_data_from_gecko, summary_for_ticker, ticker_for_ticker, volume_for_ticker,\
-    swaps24h_for_ticker, summary_ticker
-from decimal import Decimal
+    swaps24h_for_ticker, summary_ticker, get_24hr_swaps_data, get_24hr_swaps_data_by_pair
+from lib_logger import logger
+from update_db import update_seednode_swaps_db, update_seednode_failed_swaps_db, update_json
 
-path_to_db = 'MM2.db'
+
+seednode_swaps_db = 'seednode_swaps.db'
+seednode_failed_swaps_db = 'seednode_failed_swaps.db'
 app = FastAPI()
 
 app.add_middleware(
@@ -19,29 +25,65 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-available_pairs = get_availiable_pairs(path_to_db)
+
+@app.on_event("startup")
+@repeat_every(seconds=86400)  # caching data every day
+def update_coins_config():
+    data = requests.get("https://raw.githubusercontent.com/KomodoPlatform/coins/master/utils/coins_config.json").json()
+    with open('coins_config.json', 'w+') as json_file:
+        json.dump(data, json_file)
+    logger.info("Updated coins_config.json!")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=600)  # caching data every 5 min
+def update_db_data():
+    time.sleep(5) # To offset from other db queries
+    update_seednode_swaps_db()
+    update_seednode_failed_swaps_db()
+    update_json()
+    logger.warning("Pubkey json data updated!")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
     gecko_data = get_data_from_gecko()
-    print(gecko_data)
     with open('gecko_cache.json', 'w+') as json_file:
         json.dump(gecko_data, json_file)
-    print("saved gecko data to file")
+    logger.info("Updated gecko_cache.json!")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60)  # caching data every minute
+def cache_swaps_data():
+    swaps_data_24hrs = get_24hr_swaps_data(seednode_swaps_db)
+    with open('24hr_swaps_cache.json', 'w+') as json_file:
+        json.dump(swaps_data_24hrs, json_file)
+    logger.info("Updated 24hr_swaps_cache.json!")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60)  # caching data every minute
+def cache_swaps_data_by_pair():
+    swaps_data_24hrs_by_pair = get_24hr_swaps_data_by_pair(seednode_swaps_db)
+    with open('24hr_swaps_cache_by_pair.json', 'w+') as json_file:
+        json.dump(swaps_data_24hrs_by_pair, json_file)
+    logger.info("Updated 24hr_swaps_cache_by_pair.json!")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=30)  # caching data every 30 seconds
 def cache_summary_data():
-    available_pairs_summary = get_availiable_pairs(path_to_db)
+    available_pairs_summary = get_availiable_pairs(seednode_swaps_db)
+
     summary_data = []
     with open('gecko_cache.json', 'r') as json_file:
         gecko_cached_data = json.load(json_file)
     total_usd_volume = 0
     for pair in available_pairs_summary:
-        pair_summary = summary_for_pair(pair, path_to_db)
+
+        pair_summary = summary_for_pair(pair, seednode_swaps_db)
         summary_data.append(pair_summary)
         try:
             base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
@@ -60,9 +102,12 @@ def cache_summary_data():
             total_usd_volume += quote_currency_usd_vol
     with open('summary_cache.json', 'w+') as json_file:
         json.dump(summary_data, json_file)
-    usd_volume = {"usd_volume_24h": total_usd_volume}
+        logger.info("Updated summary_cache.json!")
+
+    usd_vol = {"usd_volume_24h": total_usd_volume}
     with open('usd_volume_cache.json', 'w+') as json_file:
-        json.dump(usd_volume, json_file)
+        json.dump(usd_vol, json_file)
+        logger.info("Updated usd_volume_cache.json!")
 
 
 @app.get('/api/v1/summary')
@@ -81,26 +126,26 @@ def summary():
 
 @app.get('/api/v1/summary_for_ticker/{ticker_summary}')
 def summary(ticker_summary="KMD"):
-    return summary_for_ticker(ticker_summary, path_to_db)
+    return summary_for_ticker(ticker_summary, seednode_swaps_db)
 
 
 @app.get('/api/v1/ticker')
 def ticker():
-    available_pairs_ticker = get_availiable_pairs(path_to_db)
+    available_pairs_ticker = get_availiable_pairs(seednode_swaps_db)
     ticker_data = []
     for pair in available_pairs_ticker:
-        ticker_data.append(ticker_for_pair(pair, path_to_db, 1))
+        ticker_data.append(ticker_for_pair(pair, seednode_swaps_db, 1))
     return ticker_data
 
 
 @app.get('/api/v1/ticker_for_ticker/{ticker_ticker}')
 def ticker(ticker_ticker="KMD"):
-    return ticker_for_ticker(ticker_ticker, path_to_db, 1)
+    return ticker_for_ticker(ticker_ticker, seednode_swaps_db, 1)
 
 
 @app.get('/api/v1/swaps24/{ticker}')
 def ticker(ticker="KMD"):
-    return swaps24h_for_ticker(ticker, path_to_db, 1)
+    return swaps24h_for_ticker(ticker, seednode_swaps_db, 1)
 
 
 @app.get('/api/v1/orderbook/{market_pair}')
@@ -111,13 +156,13 @@ def orderbook(market_pair="KMD_BTC"):
 
 @app.get('/api/v1/trades/{market_pair}/{days_in_past}')
 def trades(market_pair="KMD_BTC", days_in_past=1):
-    trades_data = trades_for_pair(market_pair, path_to_db, int(days_in_past))
+    trades_data = trades_for_pair(market_pair, seednode_swaps_db, int(days_in_past))
     return trades_data
 
 
 @app.get('/api/v1/atomicdexio')
 def atomicdex_info_api():
-    data = atomicdex_info(path_to_db)
+    data = atomicdex_info(seednode_swaps_db)
     return data
 
 
@@ -131,13 +176,14 @@ def fiat_rates():
 # TODO: get volumes for x days for ticker
 @app.get("/api/v1/volumes_ticker/{ticker_vol}/{days_in_past}")
 def volumes_history_ticker(ticker_vol="KMD", days_in_past=1):
-    return volume_for_ticker(ticker_vol, path_to_db, int(days_in_past))
+    return volume_for_ticker(ticker_vol, seednode_swaps_db, int(days_in_past))
 
 
 @app.get('/api/v1/tickers_summary')
 def tickers_summary():
-    return summary_ticker(path_to_db)
+    return summary_ticker(seednode_swaps_db)
 
 
 if __name__ == '__main__':
     uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
+

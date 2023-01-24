@@ -12,11 +12,11 @@ def a_day_ago():
 
 def get_ext_swaps(day_since):
     conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_data.db')
+    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
     cursor.execute(f"SELECT * FROM swaps WHERE started_at >= NOW() - INTERVAL {day_since} DAY ORDER BY started_at;")
     result = cursor.fetchall()
-    for x in result:
-        with sqlite_conn:
+    with sqlite_conn:
+        for x in result:
             x = list(x)
             x.append(int(x[2].replace(tzinfo=timezone.utc).timestamp()))
             sql = ''' REPLACE INTO swaps(id,uuid,started_at,taker_coin,taker_amount,
@@ -33,11 +33,11 @@ def get_ext_swaps(day_since):
             
 def get_ext_failed_swaps(day_since):
     conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_data.db')
+    sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
     cursor.execute(f"SELECT * FROM swaps_failed WHERE started_at >= NOW() - INTERVAL {day_since} DAY ORDER BY started_at;")
     result = cursor.fetchall()
-    for x in result:
-        with sqlite_conn:
+    with sqlite_conn:
+        for x in result:
             x = list(x)
             x.append(int(x[1].replace(tzinfo=timezone.utc).timestamp()))            
             sql = ''' REPLACE INTO failed_swaps(uuid,started_at,taker_coin,taker_amount,
@@ -212,14 +212,16 @@ def get_gui_data(rows):
 
 
 def get_24hr_swaps(cur, days):
-    cur.execute(f"SELECT * FROM swaps WHERE time_stamp > {a_day_ago() * days}")
+    sql = f"SELECT * FROM swaps WHERE time_stamp > {a_day_ago() * int(days)}"
+    cur.execute(sql)
     rows = cur.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in swaps table")
     return rows
 
 
 def get_24hr_failed_swaps(cur, days):
-    cur.execute(f"SELECT * FROM failed_swaps WHERE time_stamp > {a_day_ago() * days}")
+    sql = f"SELECT * FROM failed_swaps WHERE time_stamp > {a_day_ago() * int(days)}"
+    cur.execute(sql)
     rows = cur.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in failed_swaps table")
     return rows
@@ -228,28 +230,41 @@ def get_24hr_failed_swaps(cur, days):
 def mirror_mysql_swaps_db(day_since):
     swaps_count = get_ext_swaps(day_since)
     logger.info(f"Swaps table update complete! {swaps_count} records updated")
+
+def mirror_mysql_failed_swaps_db(day_since):
     failed_swaps_count = get_ext_failed_swaps(day_since)
     logger.info(f"Failed swaps table update complete! {failed_swaps_count} records updated")
 
 
-def update_db(days):
+def update_seednode_swaps_db(days=1):
     conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_data.db')
+    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
     with sqlite_conn:
         if sqlite_conn is not None:
-            # create tables if not existing
             lib_db.create_sqlite_table(sqlite_conn, lib_db.sql_create_swaps_table)
-            lib_db.create_sqlite_table(sqlite_conn, lib_db.sql_create_failed_swaps_table)
         else:
             logger.error("Error! cannot create the database connection.")
-
         mirror_mysql_swaps_db(days)
     cursor.close()
     conn.close()
 
 
-def update_json(days):
-    sqlite_conn = lib_db.get_sqlite('seednode_data.db')
+def update_seednode_failed_swaps_db(days=1):
+    conn, cursor = lib_db.get_mysql()
+    sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
+    with sqlite_conn:
+        if sqlite_conn is not None:
+            lib_db.create_sqlite_table(sqlite_conn, lib_db.sql_create_failed_swaps_table)
+        else:
+            logger.error("Error! cannot create the database connection.")
+
+        mirror_mysql_failed_swaps_db(days)
+    cursor.close()
+    conn.close()
+
+
+def update_json(days=1):
+    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
     with sqlite_conn:
         cur = sqlite_conn.cursor()
 
@@ -274,6 +289,9 @@ def update_json(days):
 
         value_data = get_value_data(swaps)
 
+    sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
+    with sqlite_conn:
+        cur = sqlite_conn.cursor()
         # Get 24 hour swap stats
         failed_swaps = get_24hr_failed_swaps(cur, days)
 
@@ -308,7 +326,8 @@ if __name__ == "__main__":
         days = 1
 
     if sys.argv[1] == "update_db":
-        update_db(days)
+        update_seednode_swaps_db(days)
+        update_seednode_failed_swaps_db(days)
 
     if sys.argv[1] == "update_json":
         update_json(days)
