@@ -1,8 +1,16 @@
+import os
 from fastapi.testclient import TestClient
+from requests.auth import HTTPBasicAuth
+
 from main import app
 
-client = TestClient(app)
+from dotenv import load_dotenv
+load_dotenv()
 
+API_USER = os.getenv("API_USER")
+API_PASS = os.getenv("API_PASS")
+
+client = TestClient(app)
 
 def test_summary():
     response = client.get("/api/v1/summary")
@@ -61,4 +69,96 @@ def test_volumes_ticker():
 
 def test_tickers_summary():
     response = client.get("/api/v1/tickers_summary")
+    assert response.status_code == 200
+
+
+############################################
+## Private Endpoints Below, requires auth ##
+############################################
+
+def test_24hr_pubkey_stats():
+    response = client.get("/api/v1/private/24hr_pubkey_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_coins_stats():
+    response = client.get("/api/v1/private/24hr_coins_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_version_stats():
+    response = client.get("/api/v1/private/24hr_version_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_gui_stats():
+    response = client.get("/api/v1/private/24hr_gui_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_failed_pubkey_stats():
+    response = client.get("/api/v1/private/24hr_failed_pubkey_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_failed_coins_stats():
+    response = client.get("/api/v1/private/24hr_failed_coins_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_version_stats():
+    response = client.get("/api/v1/private/24hr_version_stats")
+    assert response.status_code == 401
+
+
+def test_24hr_failed_gui_stats():
+    response = client.get("/api/v1/private/24hr_failed_gui_stats")
+    assert response.status_code == 401
+
+
+def test_authenticated_24hr_pubkey_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_pubkey_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_coins_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_coins_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_version_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_version_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_gui_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_gui_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_failed_pubkey_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_failed_pubkey_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_failed_coins_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_failed_coins_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_failed_version_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_failed_version_stats")
+    assert response.status_code == 200
+
+
+def test_authenticated_24hr_failed_gui_stats():
+    client.auth = HTTPBasicAuth(API_USER, API_PASS)
+    response = client.get("/api/v1/private/24hr_failed_gui_stats")
     assert response.status_code == 200

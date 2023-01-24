@@ -332,12 +332,10 @@ def get_data_from_gecko():
 
 def get_summary_for_ticker(ticker_summary, path_to_db):
     available_pairs_summary_ticker = get_availiable_pairs(path_to_db)
-    logger.info("got available pairs")
     summary_data = []
     for pair in available_pairs_summary_ticker:
         if ticker_summary in pair:
             summary_data.append(summary_for_pair(pair))
-            logger.info("got summary_for_pair")
     summary_data_modified = []
     for summary_sample in summary_data:
         # filtering empty data

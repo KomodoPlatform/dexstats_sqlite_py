@@ -1,9 +1,11 @@
-import uvicorn
+#!/usr/bin/env python3
 import os
 import json
 import time
-import requests
 import secrets
+import uvicorn
+import platform
+import requests
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -252,13 +254,6 @@ def get_gui_stats_24h(username: str = Depends(authenticate_user)):
     return data
 
 
-@app.get('/api/v1/private/24hr_version_stats')
-def get_version_stats_24h(username: str = Depends(authenticate_user)):
-    with open('24hr_version_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
-
-
 @app.get('/api/v1/private/24hr_failed_pubkey_stats')
 def get_24hr_failed_pubkey_stats(username: str = Depends(authenticate_user)):
     with open('24hr_failed_pubkey_stats.json', 'r') as json_file:
@@ -273,7 +268,7 @@ def get_24hr_failed_coins_stats(username: str = Depends(authenticate_user)):
     return data
 
 
-@app.get('/api/v1/private/24hr_version_stats')
+@app.get('/api/v1/private/24hr_failed_version_stats')
 def get_24hr_failed_version_stats(username: str = Depends(authenticate_user)):
     with open('24hr_failed_version_stats.json', 'r') as json_file:
         data = json.load(json_file)
@@ -289,4 +284,7 @@ def get_24hr_failed_gui_stats(username: str = Depends(authenticate_user)):
 
 
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
+    if platform.node() == "markets-atomicdex-test-api":
+        uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
+    else:
+        uvicorn.run("main:app", host="0.0.0.0", port=8081)
