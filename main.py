@@ -1,8 +1,11 @@
 import uvicorn
+import os
 import json
 import time
 import requests
-from fastapi import FastAPI
+import secrets
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, orderbook_for_pair, trades_for_pair,\
@@ -11,6 +14,11 @@ from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair,
 from lib_logger import logger
 from update_db import update_seednode_swaps_db, update_seednode_failed_swaps_db, update_json
 
+from dotenv import load_dotenv
+load_dotenv()
+
+API_USER = os.getenv("API_USER")
+API_PASS = os.getenv("API_PASS")
 
 mm2_db = 'MM2.db'
 seednode_swaps_db = 'seednode_swaps.db'
@@ -24,6 +32,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+security = HTTPBasic()
+
+
+def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
+    current_username_bytes = credentials.username.encode("utf8")
+    correct_username_bytes = API_USER.encode("utf8")
+    is_correct_username = secrets.compare_digest(
+        current_username_bytes, correct_username_bytes
+    )
+    current_password_bytes = credentials.password.encode("utf8")
+    correct_password_bytes = API_PASS.encode("utf8")
+    is_correct_password = secrets.compare_digest(
+        current_password_bytes, correct_password_bytes
+    )
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
 
 
 @app.on_event("startup")
@@ -194,6 +224,69 @@ def tickers_summary():
     return get_tickers_summary(seednode_swaps_db)
 
 
+@app.get('/api/v1/private/24hr_pubkey_stats')
+def get_pubkey_stats_24h(username: str = Depends(authenticate_user)):
+    with open('24hr_pubkey_stats.json', 'r') as json_file:
+        pubkey_stats_24h = json.load(json_file)
+    return pubkey_stats_24h
+
+
+@app.get('/api/v1/private/24hr_coins_stats')
+def get_coin_stats_24h(username: str = Depends(authenticate_user)):
+    with open('24hr_coins_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_version_stats')
+def get_version_stats_24h(username: str = Depends(authenticate_user)):
+    with open('24hr_version_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_gui_stats')
+def get_gui_stats_24h(username: str = Depends(authenticate_user)):
+    with open('24hr_gui_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_version_stats')
+def get_version_stats_24h(username: str = Depends(authenticate_user)):
+    with open('24hr_version_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_failed_pubkey_stats')
+def get_24hr_failed_pubkey_stats(username: str = Depends(authenticate_user)):
+    with open('24hr_failed_pubkey_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_failed_coins_stats')
+def get_24hr_failed_coins_stats(username: str = Depends(authenticate_user)):
+    with open('24hr_failed_coins_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_version_stats')
+def get_24hr_failed_version_stats(username: str = Depends(authenticate_user)):
+    with open('24hr_failed_version_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+@app.get('/api/v1/private/24hr_failed_gui_stats')
+def get_24hr_failed_gui_stats(username: str = Depends(authenticate_user)):
+    with open('24hr_failed_gui_stats.json', 'r') as json_file:
+        data = json.load(json_file)
+    return data
+
+
+
 if __name__ == '__main__':
-    #uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
-    uvicorn.run("main:app", host="0.0.0.0", port=8081)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
