@@ -180,13 +180,10 @@ def get_and_parse_orderbook(pair):
 # SUMMARY Endpoint
 # tuple, string -> dictionary
 # Receiving tuple with base and rel as an argument and producing CMC summary endpoint data, requires mm2 rpc password and sql db connection
-def summary_for_pair(pair, path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
+def summary_for_pair(pair):
     pair_summary = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+    swaps_for_pair_24h = get_swaps_for_pair_24h(pair)
     pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
@@ -212,7 +209,6 @@ def summary_for_pair(pair, path_to_db):
         if swap["time_stamp"] > last_swap_timestamp:
             last_swap_timestamp = swap["time_stamp"]
     pair_summary["last_swap_timestamp"] = last_swap_timestamp
-    conn.close()
     return pair_summary
 
 
@@ -223,7 +219,7 @@ def ticker_for_pair(pair, path_to_db, days_in_past=1):
     sql_cursor = conn.cursor()
     pair_ticker = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(days_in_past)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+    swaps_for_pair_24h = get_swaps_for_pair_24h(pair)
     pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
     pair_ticker[pair[0] + "_" + pair[1]] = OrderedDict()
     pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
@@ -334,12 +330,14 @@ def get_data_from_gecko():
     return gecko_prices
 
 
-def summary_for_ticker(ticker_summary, path_to_db):
+def get_summary_for_ticker(ticker_summary, path_to_db):
     available_pairs_summary_ticker = get_availiable_pairs(path_to_db)
+    logger.info("got available pairs")
     summary_data = []
     for pair in available_pairs_summary_ticker:
         if ticker_summary in pair:
-            summary_data.append(summary_for_pair(pair, path_to_db))
+            summary_data.append(summary_for_pair(pair))
+            logger.info("got summary_for_pair")
     summary_data_modified = []
     for summary_sample in summary_data:
         # filtering empty data
@@ -364,7 +362,7 @@ def summary_for_ticker(ticker_summary, path_to_db):
     return summary_data_modified
 
 
-def ticker_for_ticker(ticker_ticker, path_to_db, days_in_past=1):
+def get_ticker_for_ticker(ticker_ticker, path_to_db, days_in_past=1):
     available_pairs_ticker = get_availiable_pairs(path_to_db)
     ticker_data = []
     for pair in available_pairs_ticker:
@@ -406,7 +404,7 @@ def volume_for_ticker(ticker, path_to_db, days_in_past):
     previous_volume = 0
     for i in range(0, days_in_past):
         overall_volume = 0
-        ticker_data = ticker_for_ticker(ticker, path_to_db, i+1)
+        ticker_data = get_ticker_for_ticker(ticker, path_to_db, i+1)
         d = (datetime.today() - timedelta(days=i)).strftime('%Y-%m-%d')
         volumes_dict[d] = 0
         for pair in ticker_data:
@@ -415,12 +413,25 @@ def volume_for_ticker(ticker, path_to_db, days_in_past):
         previous_volume = overall_volume
     return volumes_dict
 
-
-def summary_ticker(path_to_db):
-
-    available_pairs = get_availiable_pairs(path_to_db)
+def get_swaps_for_pair_24h(pair):
     with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
         swaps_cache_24hr_by_pair = json.load(json_file)
+    data_a_b = []
+    data_b_a = []
+    if f"{pair[0]}/{pair[1]}" in swaps_cache_24hr_by_pair:
+        data_a_b = swaps_cache_24hr_by_pair[f"{pair[0]}/{pair[1]}"]
+        for swap in data_a_b:
+            swap["trade_type"] = "buy"
+    if f"{pair[1]}/{pair[0]}" in swaps_cache_24hr_by_pair:
+        data_b_a = swaps_cache_24hr_by_pair[f"{pair[1]}/{pair[0]}"]
+        for swap in data_b_a:
+            swap["trade_type"] = "sell"
+
+    return data_b_a + data_a_b
+
+def get_tickers_summary(path_to_db):
+
+    available_pairs = get_availiable_pairs(path_to_db)
 
     tickers_summary = {}
     for pair in available_pairs:
@@ -428,18 +439,8 @@ def summary_ticker(path_to_db):
             tickers_summary[ticker] = {"volume_24h": 0, "trades_24h": 0}
 
     for pair in available_pairs:
-        data_a_b = []
-        data_b_a = []
-        if f"{pair[0]}/{pair[1]}" in swaps_cache_24hr_by_pair:
-            data_a_b = swaps_cache_24hr_by_pair[f"{pair[0]}/{pair[1]}"]
-            for swap in data_a_b:
-                swap["trade_type"] = "buy"
-        if f"{pair[1]}/{pair[0]}" in swaps_cache_24hr_by_pair:
-            data_b_a = swaps_cache_24hr_by_pair[f"{pair[1]}/{pair[0]}"]
-            for swap in data_b_a:
-                swap["trade_type"] = "sell"
 
-        swaps_for_pair_24h = data_b_a + data_a_b
+        swaps_for_pair_24h = get_swaps_for_pair_24h(pair)
         for swap in swaps_for_pair_24h:
             if swap["trade_type"] == "buy":
                 tickers_summary[swap["maker_coin"]]["volume_24h"] += swap["maker_amount"]

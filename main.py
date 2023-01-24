@@ -5,14 +5,14 @@ import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
-from fastapi.testclient import TestClient
 from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, orderbook_for_pair, trades_for_pair,\
-    atomicdex_info, reverse_string_number, get_data_from_gecko, summary_for_ticker, ticker_for_ticker, volume_for_ticker,\
-    swaps24h_for_ticker, summary_ticker, get_24hr_swaps_data, get_24hr_swaps_data_by_pair
+    atomicdex_info, reverse_string_number, get_data_from_gecko, get_summary_for_ticker, get_ticker_for_ticker, volume_for_ticker,\
+    swaps24h_for_ticker, get_tickers_summary, get_24hr_swaps_data, get_24hr_swaps_data_by_pair
 from lib_logger import logger
 from update_db import update_seednode_swaps_db, update_seednode_failed_swaps_db, update_json
 
 
+mm2_db = 'MM2.db'
 seednode_swaps_db = 'seednode_swaps.db'
 seednode_failed_swaps_db = 'seednode_failed_swaps.db'
 app = FastAPI()
@@ -83,7 +83,7 @@ def cache_summary_data():
     total_usd_volume = 0
     for pair in available_pairs_summary:
 
-        pair_summary = summary_for_pair(pair, seednode_swaps_db)
+        pair_summary = summary_for_pair(pair)
         summary_data.append(pair_summary)
         try:
             base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
@@ -118,15 +118,15 @@ def summary():
 
 
 @app.get('/api/v1/usd_volume_24h')
-def summary():
+def usd_volume_24h():
     with open('usd_volume_cache.json', 'r') as json_file:
         usd_volume_cache = json.load(json_file)
         return usd_volume_cache
 
 
 @app.get('/api/v1/summary_for_ticker/{ticker_summary}')
-def summary(ticker_summary="KMD"):
-    return summary_for_ticker(ticker_summary, seednode_swaps_db)
+def summary_for_ticker(ticker_summary="KMD"):
+    return get_summary_for_ticker(ticker_summary, seednode_swaps_db)
 
 
 @app.get('/api/v1/ticker')
@@ -139,12 +139,12 @@ def ticker():
 
 
 @app.get('/api/v1/ticker_for_ticker/{ticker_ticker}')
-def ticker(ticker_ticker="KMD"):
-    return ticker_for_ticker(ticker_ticker, seednode_swaps_db, 1)
+def ticker_for_ticker(ticker_ticker="KMD"):
+    return get_ticker_for_ticker(ticker_ticker, seednode_swaps_db, 1)
 
 
 @app.get('/api/v1/swaps24/{ticker}')
-def ticker(ticker="KMD"):
+def swaps24(ticker="KMD"):
     return swaps24h_for_ticker(ticker, seednode_swaps_db, 1)
 
 
@@ -181,9 +181,9 @@ def volumes_history_ticker(ticker_vol="KMD", days_in_past=1):
 
 @app.get('/api/v1/tickers_summary')
 def tickers_summary():
-    return summary_ticker(seednode_swaps_db)
+    return get_tickers_summary(seednode_swaps_db)
 
 
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
-
+    #uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
+    uvicorn.run("main:app", host="0.0.0.0", port=8081)
