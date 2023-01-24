@@ -47,6 +47,15 @@ def update_db_data():
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
+def cache_swap_counts():
+    data = atomicdex_info(seednode_swaps_db)
+    with open('swap_counts.json', 'w+') as json_file:
+        json.dump(data, json_file)
+    logger.info("Updated swap_counts.json!")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
     gecko_data = get_data_from_gecko()
     with open('gecko_cache.json', 'w+') as json_file:
@@ -162,8 +171,9 @@ def trades(market_pair="KMD_BTC", days_in_past=1):
 
 @app.get('/api/v1/atomicdexio')
 def atomicdex_info_api():
-    data = atomicdex_info(seednode_swaps_db)
-    return data
+    with open('swap_counts.json', 'r') as json_file:
+        swap_counts = json.load(json_file)
+        return swap_counts
 
 
 @app.get('/api/v1/fiat_rates')
