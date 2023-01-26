@@ -1,10 +1,26 @@
 import sqlite3
 import requests
 import json
+import os
 from decimal import Decimal
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from lib_logger import logger
+
+from dotenv import load_dotenv
+load_dotenv()
+
+DOCKER_MM2_SERVICE_NAME = os.getenv("DOCKER_MM2_SERVICE_NAME")
+if DOCKER_MM2_SERVICE_NAME:
+    MM2_RPC_IP = DOCKER_MM2_SERVICE_NAME
+else:
+    MM2_RPC_IP = "127.0.0.1"
+
+MM2_PORT = os.getenv("MM2_PORT")
+if not MM2_PORT:
+    MM2_PORT = 7783
+
+
 
 # getting list of pairs with amount of swaps > 0 from db (list of tuples)
 # string -> list (of base, rel tuples)
@@ -115,7 +131,7 @@ def count_volumes_and_prices(swap_statuses):
 # tuple, string, string -> list
 # returning orderbook for given trading pair
 def get_mm2_orderbook_for_pair(pair):
-    mm2_host = "http://127.0.0.1:7783"
+    mm2_host = f"http://{MM2_RPC_IP}:{MM2_PORT}"
     params = {
               'method': 'orderbook',
               'base': pair[0],
@@ -191,11 +207,12 @@ def summary_for_pair(pair):
         orderbook = get_mm2_orderbook_for_pair(pair)
         pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
         pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
-    except:
+    except Exception as e:
         # This should throw an alert via discord/mattermost/telegram
         pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(0))
         pair_summary["highest_bid"] = "{:.10f}".format(Decimal(0))
-        logger.warning("Couldn't get orderbook! Is mm2 running?")
+        logger.warning(f"Couldn't get orderbook! Is mm2 running? {e}")
+
     pair_summary["base_currency"] = pair[0]
     pair_summary["base_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["base_volume"])
     pair_summary["quote_currency"] = pair[1]

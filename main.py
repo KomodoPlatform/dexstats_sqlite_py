@@ -287,4 +287,4 @@ if __name__ == '__main__':
     if platform.node() == "markets-atomicdex-test-api":
         uvicorn.run("main:app", host="0.0.0.0", port=8080, ssl_keyfile="/etc/letsencrypt/live/stats.testchain.xyz/privkey.pem", ssl_certfile="/etc/letsencrypt/live/stats.testchain.xyz/fullchain.pem")
     else:
-        uvicorn.run("main:app", host="0.0.0.0", port=8081)
+        uvicorn.run("main:app", host="0.0.0.0", port=8080)
