@@ -10,47 +10,146 @@ from lib_logger import logger
 def a_day_ago():
     return int(time.time()) - 24 * 60 * 60
 
-def get_ext_swaps(day_since):
+
+def get_swaps_data_from_mysql(day_since):
     conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
     cursor.execute(f"SELECT * FROM swaps WHERE started_at >= NOW() - INTERVAL {day_since} DAY ORDER BY started_at;")
-    result = cursor.fetchall()
+    return cursor.fetchall()
+
+
+def get_failed_swaps_data_from_mysql(day_since):
+    conn, cursor = lib_db.get_mysql()
+    cursor.execute(f"SELECT * FROM swaps_failed WHERE started_at >= NOW() - INTERVAL {day_since} DAY ORDER BY started_at;")
+    return cursor.fetchall()
+
+
+def import_mysql_swaps_into_sqlite(day_since, mysql_swaps_data):
+    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
     with sqlite_conn:
-        for x in result:
+        imported = 0
+        for x in mysql_swaps_data:
             x = list(x)
             x.append(int(x[2].replace(tzinfo=timezone.utc).timestamp()))
             sql = ''' REPLACE INTO swaps(id,uuid,started_at,taker_coin,taker_amount,
                                         taker_gui,taker_version,taker_pubkey,maker_coin,
                                         maker_amount,maker_gui,maker_version,maker_pubkey,
-                                        time_stamp)
+                                        epoch)
                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) '''
             cur = sqlite_conn.cursor()
             cur.execute(sql, x)
             sqlite_conn.commit()
-    cursor.close()
-    conn.close()
-    return len(result)
+            imported += 1
+    return imported
+
+
             
-def get_ext_failed_swaps(day_since):
-    conn, cursor = lib_db.get_mysql()
+def import_mysql_failed_swaps_into_sqlite(day_since, mysql_failed_swaps_data):
     sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
-    cursor.execute(f"SELECT * FROM swaps_failed WHERE started_at >= NOW() - INTERVAL {day_since} DAY ORDER BY started_at;")
-    result = cursor.fetchall()
     with sqlite_conn:
-        for x in result:
+        # get existing uuids
+        imported = 0
+        for x in mysql_failed_swaps_data:
             x = list(x)
             x.append(int(x[1].replace(tzinfo=timezone.utc).timestamp()))            
             sql = ''' REPLACE INTO failed_swaps(uuid,started_at,taker_coin,taker_amount,
                                         taker_error_type,taker_error_msg,taker_gui,taker_version,taker_pubkey,maker_coin,
                                         maker_amount,maker_error_type,maker_error_msg,maker_gui,maker_version,maker_pubkey,
-                                        time_stamp)
+                                        epoch)
                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '''
             cur = sqlite_conn.cursor()
             cur.execute(sql, x)
             sqlite_conn.commit()
-    cursor.close()
+            imported += 1
+    return imported
+
+
+def get_timescaledb_uuids(day_since, table, conn, cursor):
+    sql = f"SELECT uuid FROM {table} WHERE epoch > {a_day_ago()}"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def import_mysql_swaps_into_timescaledb(day_since, mysql_swaps_data):
+    conn, cursor = lib_db.get_timescaledb()
+    with conn:
+        existing_uuids = get_timescaledb_uuids(day_since, "swaps", conn, cursor)
+        imported = 0
+        for x in mysql_swaps_data:
+            row_data = list(x)[1:]
+            if row_data[0] not in existing_uuids:
+                row_data.append(int(row_data[1].replace(tzinfo=timezone.utc).timestamp()))
+                try:
+                    sql = f"INSERT INTO swaps \
+                            (uuid, started_at, taker_coin, taker_amount, \
+                             taker_gui, taker_version, taker_pubkey, maker_coin, \
+                             maker_amount, maker_gui, maker_version, maker_pubkey, epoch) \
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
+                    cursor.execute(sql, row_data)
+                    conn.commit()
+                    imported += 1
+                except Exception as e:
+                    logger.error(f"Exception in [update_swaps_row]: {e}")
+                    logger.error(f"[update_swaps_row] sql: {sql}")
+                    logger.error(f"[update_swaps_row] row_data: {row_data}")
+                    # input()
+                    conn.rollback()
     conn.close()
-    return len(result)
+    return imported
+
+
+def import_mysql_failed_swaps_into_timescaledb(day_since, mysql_failed_swaps_data):
+    conn, cursor = lib_db.get_timescaledb()
+    with conn:
+        existing_uuids = get_timescaledb_uuids(day_since, "failed_swaps", conn, cursor)
+        imported = 0
+        for x in mysql_failed_swaps_data:
+            row_data = list(x)
+            if row_data[0] not in existing_uuids:
+                row_data.append(int(row_data[1].replace(tzinfo=timezone.utc).timestamp()))
+                # taker_err_msg
+                if row_data[5]:
+                    row_data[5] = row_data[5].replace("'","")
+                # maker_err_msg
+                if row_data[12]:
+                    row_data[12] = row_data[12].replace("'","")
+                try:
+                    sql = f"INSERT INTO failed_swaps \
+                            (uuid, started_at, taker_coin, taker_amount, \
+                             taker_error_type, taker_error_msg, \
+                             taker_gui, taker_version, taker_pubkey, maker_coin, \
+                             maker_amount, maker_error_type, maker_error_msg, \
+                             maker_gui, maker_version, maker_pubkey, epoch) \
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    cursor.execute(sql, row_data)
+                    conn.commit()
+                    imported += 1
+                except Exception as e:
+                    logger.error(f"Exception in [update_swaps_failed_row]: {e}")
+                    logger.error(f"[update_swaps_failed_row] sql: {sql}")
+                    logger.error(f"[update_swaps_failed_row] row_data: {row_data}")
+                    # input()
+                    conn.rollback()
+    conn.close()
+    return imported
+
+
+def mirror_mysql_swaps_db(day_since):
+    # TODO: This should be sourced from every seednode running a similar instance of the docker container
+    result = get_swaps_data_from_mysql(day_since)
+    swaps_count_ts = import_mysql_swaps_into_timescaledb(day_since, result)
+    swaps_count_lite = import_mysql_swaps_into_sqlite(day_since, result)
+    logger.info(f"Sqlite swaps table update complete! {swaps_count_lite} records updated")
+    logger.info(f"TimescaleDB swaps table update complete! {swaps_count_ts} records updated")
+
+
+def mirror_mysql_failed_swaps_db(day_since):
+    # TODO: This should be sourced from every seednode running a similar instance of the docker container
+    result = get_failed_swaps_data_from_mysql(day_since)
+    failed_swaps_count_ts = import_mysql_failed_swaps_into_timescaledb(day_since, result)
+    failed_swaps_count_lite = import_mysql_failed_swaps_into_sqlite(day_since, result)
+    logger.info(f"Sqlite failed swaps table update complete! {failed_swaps_count_lite} records updated")
+    logger.info(f"TimescaleDB failed swaps table update complete! {failed_swaps_count_ts} records updated")
 
 
 def get_error_message_id(error_msg):
@@ -77,10 +176,10 @@ def get_maker_taker_error_summary(rows, taker_idx, maker_idx):
     taker_dict = {}
 
     for row in rows:
+        taker = str(row[taker_idx])
+        maker = str(row[maker_idx])
         taker_error_type = row[5]
-        taker = row[taker_idx]
         maker_error_type = row[12]
-        maker = row[maker_idx]
         taker_error_msg = get_error_message_id(row[6])
         maker_error_msg = get_error_message_id(row[13])
         if not taker: taker = "None"
@@ -112,8 +211,8 @@ def get_maker_taker_summary(rows, taker_idx, maker_idx):
 
     for row in rows:
         uuid = row[1]
-        taker = row[taker_idx]
-        maker = row[maker_idx]
+        taker = str(row[taker_idx])
+        maker = str(row[maker_idx])
 
         if taker in taker_dict:
             taker_dict[taker].append(uuid)
@@ -158,8 +257,8 @@ def get_sum_ave_max(rows, uuid_idx, taker_idx, maker_idx):
 
     for row in rows:
         uuid = row[uuid_idx]
-        taker = row[taker_idx]
-        maker = row[maker_idx]
+        taker = str(row[taker_idx])
+        maker = str(row[maker_idx])
         if taker in takers:
             takers[taker].append(uuid)
         else:
@@ -212,7 +311,7 @@ def get_gui_data(rows):
 
 
 def get_24hr_swaps(cur, days):
-    sql = f"SELECT * FROM swaps WHERE time_stamp > {a_day_ago() * int(days)}"
+    sql = f"SELECT * FROM swaps WHERE epoch > {a_day_ago() * int(days)}"
     cur.execute(sql)
     rows = cur.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in swaps table")
@@ -220,56 +319,19 @@ def get_24hr_swaps(cur, days):
 
 
 def get_24hr_failed_swaps(cur, days):
-    sql = f"SELECT * FROM failed_swaps WHERE time_stamp > {a_day_ago() * int(days)}"
+    sql = f"SELECT * FROM failed_swaps WHERE epoch > {a_day_ago() * int(days)}"
     cur.execute(sql)
     rows = cur.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in failed_swaps table")
     return rows
 
 
-def mirror_mysql_swaps_db(day_since):
-    swaps_count = get_ext_swaps(day_since)
-    logger.info(f"Swaps table update complete! {swaps_count} records updated")
-
-def mirror_mysql_failed_swaps_db(day_since):
-    failed_swaps_count = get_ext_failed_swaps(day_since)
-    logger.info(f"Failed swaps table update complete! {failed_swaps_count} records updated")
-
-
-def update_seednode_swaps_db(days=1):
-    conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
-    with sqlite_conn:
-        if sqlite_conn is not None:
-            lib_db.create_sqlite_table(sqlite_conn, lib_db.sql_create_swaps_table)
-        else:
-            logger.error("Error! cannot create the database connection.")
-        mirror_mysql_swaps_db(days)
-    cursor.close()
-    conn.close()
-
-
-def update_seednode_failed_swaps_db(days=1):
-    conn, cursor = lib_db.get_mysql()
-    sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
-    with sqlite_conn:
-        if sqlite_conn is not None:
-            lib_db.create_sqlite_table(sqlite_conn, lib_db.sql_create_failed_swaps_table)
-        else:
-            logger.error("Error! cannot create the database connection.")
-
-        mirror_mysql_failed_swaps_db(days)
-    cursor.close()
-    conn.close()
-
-
 def update_json(days=1):
-    sqlite_conn = lib_db.get_sqlite('seednode_swaps.db')
-    with sqlite_conn:
-        cur = sqlite_conn.cursor()
+    conn, cursor = lib_db.get_timescaledb()
 
+    with conn:
         # Get 24 hour swap stats
-        swaps = get_24hr_swaps(cur, days)
+        swaps = get_24hr_swaps(cursor, days)
 
         pubkey_data = get_pubkey_data(swaps)
         with open("24hr_pubkey_stats.json", "w+") as f:
@@ -289,11 +351,8 @@ def update_json(days=1):
 
         value_data = get_value_data(swaps)
 
-    sqlite_conn = lib_db.get_sqlite('seednode_failed_swaps.db')
-    with sqlite_conn:
-        cur = sqlite_conn.cursor()
         # Get 24 hour swap stats
-        failed_swaps = get_24hr_failed_swaps(cur, days)
+        failed_swaps = get_24hr_failed_swaps(cursor, days)
 
         failed_pubkey_data = get_failed_pubkey_data(failed_swaps)
         with open("24hr_failed_pubkey_stats.json", "w+") as f:
@@ -311,6 +370,9 @@ def update_json(days=1):
         with open("24hr_failed_gui_stats.json", "w+") as f:
             json.dump(failed_gui_data, f, indent=4)
 
+        logger.info("24hr json stats files updated!")
+    conn.close()
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
@@ -326,8 +388,8 @@ if __name__ == "__main__":
         days = 1
 
     if sys.argv[1] == "update_db":
-        update_seednode_swaps_db(days)
-        update_seednode_failed_swaps_db(days)
+        mirror_mysql_swaps_db(days)
+        mirror_mysql_failed_swaps_db(days)
 
     if sys.argv[1] == "update_json":
         update_json(days)

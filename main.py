@@ -14,7 +14,7 @@ from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair,
     atomicdex_info, reverse_string_number, get_data_from_gecko, get_summary_for_ticker, get_ticker_for_ticker, volume_for_ticker,\
     swaps24h_for_ticker, get_tickers_summary, get_24hr_swaps_data, get_24hr_swaps_data_by_pair
 from lib_logger import logger
-from update_db import update_seednode_swaps_db, update_seednode_failed_swaps_db, update_json
+from update_db import mirror_mysql_swaps_db, mirror_mysql_failed_swaps_db, update_json
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -68,13 +68,16 @@ def update_coins_config():
 
 
 @app.on_event("startup")
-@repeat_every(seconds=600)  # caching data every 5 min
+@repeat_every(seconds=60)  # caching data every 5 min
 def update_db_data():
-    time.sleep(5) # To offset from other db queries
-    update_seednode_swaps_db()
-    update_seednode_failed_swaps_db()
-    update_json()
-    logger.warning("Pubkey json data updated!")
+    time.sleep(10) # To offset from other db queries
+    try:
+        mirror_mysql_swaps_db(1)
+        mirror_mysql_failed_swaps_db(1)
+        mirror_mysql_failed_swaps_db(1)
+        update_json()
+    except Exception as e:
+        logger.warning(e)
 
 
 @app.on_event("startup")

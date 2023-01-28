@@ -2,5 +2,7 @@
 *.json
 *.json.back
 *.db
+*.log
+*.new
 __pycache__/
 
