@@ -9,8 +9,8 @@ from lib_helper import days_ago
 load_dotenv()
 
 def get_timescaledb(localhost=False):
-    if localhost: host = 'localhost'
-    else: host = os.getenv("POSTGRES_HOST")
+    if localhost: host = os.getenv("POSTGRES_HOST")
+    else: host = os.getenv("DOCKER_DB_SERVICE_NAME")
     conn = psycopg2.connect(
         host=host,
         user=os.getenv("POSTGRES_USER"),

@@ -14,7 +14,7 @@ if len(sys.argv) > 1:
 conn, cursor = lib_ts_db.get_timescaledb(True)
 with conn:
     lib_ts_db.create_timescaledb_tables(conn, cursor, drop_first)
-
+    logger.info("Timescale DBs created...")
     sqlite_conn = lib_sqlite_db.get_sqlite('seednode_swaps.db')
     lib_sqlite_db.create_sqlite_table(sqlite_conn, lib_sqlite_db.sql_create_swaps_table)
 
