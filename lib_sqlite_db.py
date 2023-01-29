@@ -55,3 +55,57 @@ def import_mysql_failed_swaps_into_sqlite(day_since, mysql_failed_swaps_data):
             sqlite_conn.commit()
             imported += 1
     return imported
+
+
+
+def create_sqlite_table(conn, create_table_sql):
+    """ create a table from the create_table_sql statement
+    :param conn: Connection object
+    :param create_table_sql: a CREATE TABLE statement
+    :return:
+    """
+    try:
+        c = conn.cursor()
+        c.execute(create_table_sql)
+    except sqlite3.Error as e:
+        logger.error(e)
+
+
+sql_create_swaps_table = """CREATE TABLE IF NOT EXISTS swaps (
+                                id integer PRIMARY KEY,
+                                started_at text NOT NULL,
+                                uuid text NOT NULL UNIQUE,
+                                taker_coin integer NOT NULL,
+                                taker_amount integer NOT NULL,
+                                taker_gui text,
+                                taker_version text,
+                                taker_pubkey text,
+                                maker_coin integer NOT NULL,
+                                maker_amount integer NOT NULL,
+                                maker_gui text,
+                                maker_version text,
+                                maker_pubkey text,
+                                epoch int NOT NULL
+                            );"""
+
+
+sql_create_failed_swaps_table = """CREATE TABLE IF NOT EXISTS failed_swaps (
+                                id integer PRIMARY KEY,
+                                started_at text NOT NULL,
+                                uuid text NOT NULL UNIQUE,
+                                taker_coin integer NOT NULL,
+                                taker_amount integer NOT NULL,
+                                taker_error_type text,
+                                taker_error_msg text,
+                                taker_gui text,
+                                taker_version text,
+                                taker_pubkey text,
+                                maker_coin integer NOT NULL,
+                                maker_amount integer NOT NULL,
+                                maker_error_type text,
+                                maker_error_msg text,
+                                maker_gui text,
+                                maker_version text,
+                                maker_pubkey text,
+                                epoch int NOT NULL
+                            );"""
