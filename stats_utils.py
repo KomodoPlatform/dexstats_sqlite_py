@@ -21,7 +21,6 @@ if not MM2_PORT:
     MM2_PORT = 7783
 
 
-
 # getting list of pairs with amount of swaps > 0 from db (list of tuples)
 # string -> list (of base, rel tuples)
 def get_availiable_pairs(path_to_db):

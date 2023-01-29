@@ -119,15 +119,18 @@ def cache_swaps_data_by_pair():
 @app.on_event("startup")
 @repeat_every(seconds=30)  # caching data every 30 seconds
 def cache_summary_data():
-    available_pairs_summary = get_availiable_pairs(seednode_swaps_db)
 
-    summary_data = []
     with open('gecko_cache.json', 'r') as json_file:
         gecko_cached_data = json.load(json_file)
-    total_usd_volume = 0
-    for pair in available_pairs_summary:
 
-        pair_summary = summary_for_pair(pair)
+    with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
+        swaps_cache_24hr_by_pair = json.load(json_file)
+
+    summary_data = []
+    total_usd_volume = 0
+    for pair in swaps_cache_24hr_by_pair:
+
+        pair_summary = summary_for_pair(pair, swaps_cache_24hr_by_pair)
         summary_data.append(pair_summary)
         try:
             base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
@@ -226,7 +229,7 @@ def volumes_history_ticker(ticker_vol="KMD", days_in_past=1):
 
 @app.get('/api/v1/tickers_summary')
 def tickers_summary():
-    return get_tickers_summary(seednode_swaps_db)
+    return get_tickers_summary()
 
 
 @app.get('/api/v1/private/24hr_pubkey_stats')
