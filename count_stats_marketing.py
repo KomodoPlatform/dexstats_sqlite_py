@@ -35,7 +35,7 @@ swaps_2021 = len(swap_statuses_2021)
 usd_volume_2021 = usd_volume_for_swap_statuses(swap_statuses_2021)
 
 
-available_pairs = get_availiable_pairs(path_to_db)
+available_pairs = get_availiable_pairs()
 fresh_pairs_count = 0
 fresh_pairs = []
 for pair in available_pairs:

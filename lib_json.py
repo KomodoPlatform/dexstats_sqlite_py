@@ -193,3 +193,18 @@ def update_json(days=1, localhost=False):
 def get_swaps_cache_24hr_by_pair():
     with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
         return json.load(json_file)
+
+def get_jsonfile_data(filename):
+    try:
+        with open(filename, 'r') as json_file:
+            return json.load(json_file)
+    except Exception as e:
+        logger.warning(f"Failed to read {filename}: {e}")
+
+def write_jsonfile_data(filename, data):
+    try:
+        with open(filename, 'w+') as json_file:
+            json.dump(data, json_file, indent=2)
+        logger.info(f"Updated {filename}!")
+    except Exception as e:
+        logger.warning(f"Failed to write {filename}: {e}")

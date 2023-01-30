@@ -1,4 +1,8 @@
+#!/usr/bin/env python3
+
 import os
+import platform
+from lib_logger import logger
 from fastapi.testclient import TestClient
 from requests.auth import HTTPBasicAuth
 

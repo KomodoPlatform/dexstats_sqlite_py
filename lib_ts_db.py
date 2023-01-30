@@ -177,7 +177,7 @@ def create_timescaledb_tables(conn, cursor, drop_tables=False):
 
 
 def get_timescaledb_uuids(days, table, conn, cursor):
-    sql = f"SELECT uuid FROM {table} WHERE epoch > {days_ago(int(days))}"
+    sql = f"SELECT uuid FROM {table} WHERE epoch > {days_ago(days)}"
     cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
     return results
@@ -247,24 +247,37 @@ def import_mysql_failed_swaps_into_timescaledb(day_since, mysql_failed_swaps_dat
     return imported
 
 
-def get_24hr_swaps(cur, days):
-    sql = f"SELECT * FROM swaps WHERE epoch > {days_ago(int(days))}"
-    cur.execute(sql)
-    rows = cur.fetchall()
+def get_24hr_swaps(cursor, days):
+    sql = f"SELECT * FROM swaps WHERE epoch > {days_ago(days)}"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in swaps table")
     return rows
 
 
-def get_24hr_failed_swaps(cur, days):
-    sql = f"SELECT * FROM failed_swaps WHERE epoch > {days_ago(int(days))}"
-    cur.execute(sql)
-    rows = cur.fetchall()
+def get_24hr_failed_swaps(cursor, days):
+    sql = f"SELECT * FROM failed_swaps WHERE epoch > {days_ago(days)}"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
     logger.info(f"{len(rows)} records returned for last 24 hours in failed_swaps table")
     return rows
 
+def get_pairs(cursor, days=1):
+    sql = f"SELECT CONCAT(maker_coin, '/', taker_coin) as trading_pair \
+                FROM swaps \
+                WHERE epoch > {days_ago(days)} \
+                GROUP BY maker_coin, taker_coin \
+                ORDER BY trading_pair;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    logger.info(f"{len(results)} records returned for get_pairs")
+    return results
 
-def get_swaps_stats(cur, days):
-    last_price_data = get_pairs_last_price(cur, days)
+
+
+
+def get_swaps_stats(cursor, days):
+    last_price_data = get_pairs_last_price(cursor, days)
     sql = f"SELECT row_to_json(row) FROM ( \
                 SELECT \
                     CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
@@ -276,11 +289,11 @@ def get_swaps_stats(cur, days):
                     MIN(taker_amount/maker_amount) AS min_maker_price, MIN(maker_amount/taker_amount) AS min_taker_price, \
                     COUNT(maker_coin) AS count_swaps \
                 FROM swaps \
-                WHERE epoch > {days_ago(int(days))} \
+                WHERE epoch > {days_ago(days)} \
                 GROUP BY maker_coin, taker_coin \
                 ORDER BY trading_pair) \
             row;"
-    cur.execute(sql)
+    cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
     for i in results:
         i.update({"last_price": last_price_data[i["trading_pair"]]})
@@ -289,7 +302,7 @@ def get_swaps_stats(cur, days):
     return results
 
 
-def get_pairs_last_price(cur, days, as_dict=True):
+def get_pairs_last_price(cursor, days, as_dict=True):
     sql = f"SELECT row_to_json(row) FROM ( \
                 SELECT \
                     CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
@@ -303,9 +316,9 @@ def get_pairs_last_price(cur, days, as_dict=True):
                         RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING \
                     ) as last_price \
                 FROM swaps \
-                WHERE epoch > {days_ago(int(days))})\
+                WHERE epoch > {days_ago(days)})\
             row WHERE row_num = 1;"
-    cur.execute(sql)
+    cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
     logger.info(f"{len(results)} records returned for get_pairs_last_price")
 
@@ -314,6 +327,13 @@ def get_pairs_last_price(cur, days, as_dict=True):
         for i in results:
             results_dict.update({i["trading_pair"]: i})
         return results_dict
+    return results
+
+
+def get_swaps_data(conn, cursor, days=1):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM swaps WHERE epoch > {days_ago(1)}) row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
     return results
 
 

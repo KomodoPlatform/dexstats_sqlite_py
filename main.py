@@ -10,11 +10,14 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
-from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, orderbook_for_pair, trades_for_pair,\
-    atomicdex_info, reverse_string_number, get_data_from_gecko, get_summary_for_ticker, get_ticker_for_ticker, volume_for_ticker,\
-    swaps24h_for_ticker, get_tickers_summary, get_24hr_swaps_data, get_24hr_swaps_data_by_pair
+import stats_utils
+import lib_mm2
+from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, trades_for_pair,\
+    reverse_string_number, get_data_from_gecko, get_summary_for_ticker, get_ticker_for_ticker, volume_for_ticker,\
+    swaps24h_for_ticker, get_tickers_summary
 from lib_logger import logger
 from update_db import mirror_mysql_swaps_db, mirror_mysql_failed_swaps_db, update_json
+import lib_json
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -61,128 +64,127 @@ def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
 @app.on_event("startup")
 @repeat_every(seconds=86400)  # caching data every day
 def update_coins_config():
-    data = requests.get("https://raw.githubusercontent.com/KomodoPlatform/coins/master/utils/coins_config.json").json()
-    with open('coins_config.json', 'w+') as json_file:
-        json.dump(data, json_file)
-    logger.info("Updated coins_config.json!")
+    try:
+        data = requests.get("https://raw.githubusercontent.com/KomodoPlatform/coins/master/utils/coins_config.json").json()
+        lib_json.write_jsonfile_data('coins_config.json', data)
+    except Exception as e:
+        logger.info(f"Error in [update_coins_config]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every 5 min
 def update_db_data():
-    time.sleep(10) # To offset from other db queries
     try:
+        time.sleep(10) # To offset from other db queries
         mirror_mysql_swaps_db(1)
         mirror_mysql_failed_swaps_db(1)
         mirror_mysql_failed_swaps_db(1)
         update_json()
     except Exception as e:
-        logger.warning(e)
+        logger.info(f"Error in [update_db_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_swap_counts():
-    data = atomicdex_info(seednode_swaps_db)
-    with open('swap_counts.json', 'w+') as json_file:
-        json.dump(data, json_file)
-    logger.info("Updated swap_counts.json!")
+    lib_json.write_jsonfile_data('swap_counts.json', stats_utils.get_atomicdex_info())
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
-    gecko_data = get_data_from_gecko()
-    with open('gecko_cache.json', 'w+') as json_file:
-        json.dump(gecko_data, json_file)
-    logger.info("Updated gecko_cache.json!")
+    try:
+        data = get_data_from_gecko()
+        lib_json.write_jsonfile_data('gecko_cache.json', data)
+    except Exception as e:
+        logger.info(f"Error in [cache_gecko_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_swaps_data():
-    swaps_data_24hrs = get_24hr_swaps_data(seednode_swaps_db)
-    with open('24hr_swaps_cache.json', 'w+') as json_file:
-        json.dump(swaps_data_24hrs, json_file)
-    logger.info("Updated 24hr_swaps_cache.json!")
+    try:
+        data = stats_utils.get_24hr_swaps_data()
+        lib_json.write_jsonfile_data('24hr_swaps_cache.json', data)
+    except Exception as e:
+        logger.info(f"[cache_swaps_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_swaps_data_by_pair():
-    swaps_data_24hrs_by_pair = get_24hr_swaps_data_by_pair(seednode_swaps_db)
-    with open('24hr_swaps_cache_by_pair.json', 'w+') as json_file:
-        json.dump(swaps_data_24hrs_by_pair, json_file)
-    logger.info("Updated 24hr_swaps_cache_by_pair.json!")
+    try:
+        data = stats_utils.get_24hr_swaps_data_by_pair()
+        lib_json.write_jsonfile_data('24hr_swaps_cache_by_pair.json', data)
+    except Exception as e:
+        logger.info(f"[cache_swaps_data_by_pair]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=30)  # caching data every 30 seconds
 def cache_summary_data():
+    try:
+        gecko_cached_data = lib_json.get_jsonfile_data('gecko_cache.json')
+        swaps_cache_24hr_by_pair = lib_json.get_jsonfile_data('24hr_swaps_cache_by_pair.json')
 
-    with open('gecko_cache.json', 'r') as json_file:
-        gecko_cached_data = json.load(json_file)
+        summary_data = []
+        total_usd_volume = 0
+        for pair in swaps_cache_24hr_by_pair:
 
-    with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
-        swaps_cache_24hr_by_pair = json.load(json_file)
+            pair_summary = summary_for_pair(pair)
+            summary_data.append(pair_summary)
+            try:
+                base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
+                                        * float(pair_summary["base_volume"])
+            except KeyError:
+                base_currency_usd_vol = 0
+            try:
+                quote_currency_usd_vol = float(gecko_cached_data[pair_summary["quote_currency"]]["usd_price"]) \
+                                         * float(pair_summary["quote_volume"])
+            except KeyError:
+                quote_currency_usd_vol = 0
+            # a bit hacky way but its semantically not correct to add both, so we adding most valuable one volume
+            if base_currency_usd_vol > quote_currency_usd_vol:
+                total_usd_volume += base_currency_usd_vol
+            else:
+                total_usd_volume += quote_currency_usd_vol
 
-    summary_data = []
-    total_usd_volume = 0
-    for pair in swaps_cache_24hr_by_pair:
+        usd_vol = {"usd_volume_24h": total_usd_volume}
+        lib_json.write_jsonfile_data('summary_cache.json', summary_data)
+        lib_json.write_jsonfile_data('usd_volume_cache.json', usd_vol)
+    except Exception as e:
+        logger.info(f"[cache_summary_data]: {e}")
 
-        pair_summary = summary_for_pair(pair, swaps_cache_24hr_by_pair)
-        summary_data.append(pair_summary)
-        try:
-            base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
-                                    * float(pair_summary["base_volume"])
-        except KeyError:
-            base_currency_usd_vol = 0
-        try:
-            quote_currency_usd_vol = float(gecko_cached_data[pair_summary["quote_currency"]]["usd_price"]) \
-                                     * float(pair_summary["quote_volume"])
-        except KeyError:
-            quote_currency_usd_vol = 0
-        # a bit hacky way but its semantically not correct to add both, so we adding most valuable one volume
-        if base_currency_usd_vol > quote_currency_usd_vol:
-            total_usd_volume += base_currency_usd_vol
-        else:
-            total_usd_volume += quote_currency_usd_vol
-    with open('summary_cache.json', 'w+') as json_file:
-        json.dump(summary_data, json_file)
-        logger.info("Updated summary_cache.json!")
-
-    usd_vol = {"usd_volume_24h": total_usd_volume}
-    with open('usd_volume_cache.json', 'w+') as json_file:
-        json.dump(usd_vol, json_file)
-        logger.info("Updated usd_volume_cache.json!")
 
 
 @app.get('/api/v1/summary')
 def summary():
-    with open('summary_cache.json', 'r') as json_file:
-        summary_cache_data = json.load(json_file)
-        return summary_cache_data
+    return lib_json.get_jsonfile_data('summary_cache.json')
 
 
 @app.get('/api/v1/usd_volume_24h')
 def usd_volume_24h():
-    with open('usd_volume_cache.json', 'r') as json_file:
-        usd_volume_cache = json.load(json_file)
-        return usd_volume_cache
+    return lib_json.get_jsonfile_data('usd_volume_cache.json')
 
 
 @app.get('/api/v1/summary_for_ticker/{ticker_summary}')
 def summary_for_ticker(ticker_summary="KMD"):
-    return get_summary_for_ticker(ticker_summary, seednode_swaps_db)
+    try:
+        return get_summary_for_ticker(ticker_summary, seednode_swaps_db)
+    except Exception as e:
+        logger.info(f"[summary_for_ticker]: {e}")
 
 
 @app.get('/api/v1/ticker')
 def ticker():
-    available_pairs_ticker = get_availiable_pairs(seednode_swaps_db)
-    ticker_data = []
-    for pair in available_pairs_ticker:
-        ticker_data.append(ticker_for_pair(pair, seednode_swaps_db, 1))
-    return ticker_data
+    try:
+        available_pairs_ticker = get_availiable_pairs()
+        ticker_data = []
+        for pair in available_pairs_ticker:
+            ticker_data.append(ticker_for_pair(pair, seednode_swaps_db, 1))
+        return ticker_data
+    except Exception as e:
+        logger.info(f"[ticker]: {e}")
 
 
 @app.get('/api/v1/ticker_for_ticker/{ticker_ticker}')
@@ -197,7 +199,7 @@ def swaps24(ticker="KMD"):
 
 @app.get('/api/v1/orderbook/{market_pair}')
 def orderbook(market_pair="KMD_BTC"):
-    orderbook_data = orderbook_for_pair(market_pair)
+    orderbook_data = lib_mm2.orderbook_for_pair(market_pair)
     return orderbook_data
 
 
@@ -209,16 +211,12 @@ def trades(market_pair="KMD_BTC", days_in_past=1):
 
 @app.get('/api/v1/atomicdexio')
 def atomicdex_info_api():
-    with open('swap_counts.json', 'r') as json_file:
-        swap_counts = json.load(json_file)
-        return swap_counts
+    return lib_json.get_jsonfile_data('swap_counts.json')
 
 
 @app.get('/api/v1/fiat_rates')
 def fiat_rates():
-    with open('gecko_cache.json', 'r') as json_file:
-        gecko_cached_data = json.load(json_file)
-    return gecko_cached_data
+    return lib_json.get_jsonfile_data('gecko_cache.json')
 
 
 # TODO: get volumes for x days for ticker
@@ -234,58 +232,42 @@ def tickers_summary():
 
 @app.get('/api/v1/private/24hr_pubkey_stats')
 def get_pubkey_stats_24h(username: str = Depends(authenticate_user)):
-    with open('24hr_pubkey_stats.json', 'r') as json_file:
-        pubkey_stats_24h = json.load(json_file)
-    return pubkey_stats_24h
+    return lib_json.get_jsonfile_data('24hr_pubkey_stats.json')
 
 
 @app.get('/api/v1/private/24hr_coins_stats')
 def get_coin_stats_24h(username: str = Depends(authenticate_user)):
-    with open('24hr_coins_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_coins_stats.json')
 
 
 @app.get('/api/v1/private/24hr_version_stats')
 def get_version_stats_24h(username: str = Depends(authenticate_user)):
-    with open('24hr_version_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_version_stats.json')
 
 
 @app.get('/api/v1/private/24hr_gui_stats')
 def get_gui_stats_24h(username: str = Depends(authenticate_user)):
-    with open('24hr_gui_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_gui_stats.json')
 
 
 @app.get('/api/v1/private/24hr_failed_pubkey_stats')
 def get_24hr_failed_pubkey_stats(username: str = Depends(authenticate_user)):
-    with open('24hr_failed_pubkey_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_failed_pubkey_stats.json')
 
 
 @app.get('/api/v1/private/24hr_failed_coins_stats')
 def get_24hr_failed_coins_stats(username: str = Depends(authenticate_user)):
-    with open('24hr_failed_coins_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_failed_coins_stats.json')
 
 
 @app.get('/api/v1/private/24hr_failed_version_stats')
 def get_24hr_failed_version_stats(username: str = Depends(authenticate_user)):
-    with open('24hr_failed_version_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_failed_version_stats.json')
 
 
 @app.get('/api/v1/private/24hr_failed_gui_stats')
 def get_24hr_failed_gui_stats(username: str = Depends(authenticate_user)):
-    with open('24hr_failed_gui_stats.json', 'r') as json_file:
-        data = json.load(json_file)
-    return data
+    return lib_json.get_jsonfile_data('24hr_failed_gui_stats.json')
 
 
 

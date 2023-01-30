@@ -2,87 +2,39 @@ import sqlite3
 import requests
 import json
 import os
+import platform
 from decimal import Decimal
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from lib_logger import logger
+import lib_ts_db
+import lib_mm2
+import lib_json
+import lib_sqlite_db
 
 from dotenv import load_dotenv
 load_dotenv()
 
-DOCKER_MM2_SERVICE_NAME = os.getenv("DOCKER_MM2_SERVICE_NAME")
-if DOCKER_MM2_SERVICE_NAME:
-    MM2_RPC_IP = DOCKER_MM2_SERVICE_NAME
-else:
-    MM2_RPC_IP = "127.0.0.1"
+#LOCALHOST = True
+LOCALHOST = False
 
-MM2_PORT = os.getenv("MM2_PORT")
-if not MM2_PORT:
-    MM2_PORT = 7783
+
+# Data for atomicdex.io website
+def get_atomicdex_info():
+    return {
+        "swaps_24h" : len(lib_sqlite_db.get_swaps_failed_since(1)),
+        "swaps_30d" : len(lib_sqlite_db.get_swaps_failed_since(30)),
+        "swaps_all_time" : len(lib_sqlite_db.get_all_swaps())
+    }
 
 
 # getting list of pairs with amount of swaps > 0 from db (list of tuples)
 # string -> list (of base, rel tuples)
-def get_availiable_pairs(path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    sql_cursor = conn.cursor()
-    sql_cursor.execute("SELECT DISTINCT maker_coin, taker_coin FROM swaps;")
-    available_pairs = sql_cursor.fetchall()
-    sorted_available_pairs = []
-    for pair in available_pairs:
-       sorted_available_pairs.append(tuple(sorted(pair)))
-    conn.close()
-    # removing duplicates
-    return list(set(sorted_available_pairs))
-
-
-# tuple, integer -> list (with swap status dicts)
-# select from DB swap statuses for desired pair with timestamps > than provided
-def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
-    t = (timestamp,pair[0],pair[1],)
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND maker_coin=? AND taker_coin=?;", t)
-    swap_statuses_a_b = [dict(row) for row in sql_cursor.fetchall()]
-    for swap in swap_statuses_a_b:
-        swap["trade_type"] = "buy"
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND taker_coin=? AND maker_coin=?;", t)
-    swap_statuses_b_a = [dict(row) for row in sql_cursor.fetchall()]
-    # should be enough to change amounts place = change direction
-    for swap in swap_statuses_b_a:
-        swap["trade_type"] = "sell"
-    swap_statuses = swap_statuses_a_b + swap_statuses_b_a
-    return swap_statuses
-
-# tuple, integer -> list (with swap status dicts)
-# select from json cache swap statuses for desired pair with timestamps > than provided
-def get_24hr_swaps_for_pair(swaps_cache_24hr, pair):
-    t = (timestamp,pair[0],pair[1],)
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND maker_coin=? AND taker_coin=?;", t)
-    swap_statuses_a_b = [dict(row) for row in sql_cursor.fetchall()]
-    for swap in swap_statuses_a_b:
-        swap["trade_type"] = "buy"
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND taker_coin=? AND maker_coin=?;", t)
-    swap_statuses_b_a = [dict(row) for row in sql_cursor.fetchall()]
-    # should be enough to change amounts place = change direction
-    for swap in swap_statuses_b_a:
-        swap["trade_type"] = "sell"
-    swap_statuses = swap_statuses_a_b + swap_statuses_b_a
-    return swap_statuses
-
-
-def get_swaps_between_timestamps_for_pair(sql_cursor, pair, timestamp_a, timestamp_b):
-    t = (timestamp_a,timestamp_b,pair[0],pair[1],)
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND time_stamp < ? AND maker_coin=? AND taker_coin=?;", t)
-    swap_statuses_a_b = [dict(row) for row in sql_cursor.fetchall()]
-    for swap in swap_statuses_a_b:
-        swap["trade_type"] = "buy"
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ? AND time_stamp < ? AND taker_coin=? AND maker_coin=?;", t)
-    swap_statuses_b_a = [dict(row) for row in sql_cursor.fetchall()]
-    # should be enough to change amounts place = change direction
-    for swap in swap_statuses_b_a:
-        swap["trade_type"] = "sell"
-    swap_statuses = swap_statuses_a_b + swap_statuses_b_a
-    return swap_statuses
-
+def get_availiable_pairs():
+    conn, cursor = lib_ts_db.get_timescaledb(LOCALHOST)
+    pairs = lib_ts_db.get_pairs(cursor, 1)
+    pairs.sort()
+    return pairs
 
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
@@ -97,12 +49,12 @@ def count_volumes_and_prices(swap_statuses):
             base_volume += swap_status["maker_amount"]
             quote_volume += swap_status["taker_amount"]
             swap_price = Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"])
-            swap_prices.update({swap_status["time_stamp"]: swap_price})
+            swap_prices.update({swap_status["epoch"]: swap_price})
         if swap_status["trade_type"] == "sell":
             base_volume += swap_status["taker_amount"]
             quote_volume += swap_status["maker_amount"]
             swap_price = Decimal(swap_status["maker_amount"]) / Decimal(swap_status["taker_amount"])
-            swap_prices.update({swap_status["time_stamp"]: swap_price})
+            swap_prices.update({swap_status["epoch"]: swap_price})
 
 
     pair_volumes_and_prices["base_volume"] = base_volume
@@ -124,72 +76,8 @@ def count_volumes_and_prices(swap_statuses):
         pair_volumes_and_prices["price_change_percent_24h"] = ( swap_prices[max(swap_prices.keys())] - swap_prices[min(swap_prices.keys())] ) / Decimal(100)
     except ValueError:
         pair_volumes_and_prices["price_change_percent_24h"] = 0
+    logger.info(f"{pair}: {pair_volumes_and_prices}")
     return pair_volumes_and_prices
-
-
-# tuple, string, string -> list
-# returning orderbook for given trading pair
-def get_mm2_orderbook_for_pair(pair):
-    mm2_host = f"http://{MM2_RPC_IP}:{MM2_PORT}"
-    params = {
-              'method': 'orderbook',
-              'base': pair[0],
-              'rel': pair[1]
-             }
-    r = requests.post(mm2_host, json=params)
-    return json.loads(r.text)
-
-
-# list -> string
-# returning lowest ask from provided orderbook
-
-def find_lowest_ask(orderbook):
-    lowest_ask = {"price" : "0"}
-    try:
-        for ask in orderbook["asks"]:
-            if lowest_ask["price"] == "0":
-                lowest_ask = ask
-            elif Decimal(ask["price"]) < Decimal(lowest_ask["price"]):
-                lowest_ask = ask
-    except KeyError:
-        return 0
-    return lowest_ask["price"]
-
-
-# list -> string
-# returning highest bid from provided orderbook
-def find_highest_bid(orderbook):
-    highest_bid = {"price" : "0"}
-    try:
-        for bid in orderbook["bids"]:
-            if Decimal(bid["price"]) > Decimal(highest_bid["price"]):
-                highest_bid = bid
-    except KeyError:
-        return 0
-    return highest_bid["price"]
-
-
-def get_and_parse_orderbook(pair):
-    orderbook = get_mm2_orderbook_for_pair(pair)
-    bids_converted_list = []
-    asks_converted_list = []
-    try:
-        for bid in orderbook["bids"]:
-            converted_bid = []
-            converted_bid.append(bid["price"])
-            converted_bid.append(bid["maxvolume"])
-            bids_converted_list.append(converted_bid)
-    except KeyError:
-        pass
-    try:
-        for ask in orderbook["asks"]:
-            converted_ask = []
-            converted_ask.append(ask["price"])
-            converted_ask.append(ask["maxvolume"])
-            asks_converted_list.append(converted_ask)
-    except KeyError:
-        pass
-    return bids_converted_list, asks_converted_list
 
 
 # SUMMARY Endpoint
@@ -203,9 +91,9 @@ def summary_for_pair(pair):
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     try:
-        orderbook = get_mm2_orderbook_for_pair(pair)
-        pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
-        pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
+        orderbook = lib_mm2.get_mm2_orderbook_for_pair(pair)
+        pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(lib_mm2.find_lowest_ask(orderbook)))
+        pair_summary["highest_bid"] = "{:.10f}".format(Decimal(lib_mm2.find_highest_bid(orderbook)))
     except Exception as e:
         # This should throw an alert via discord/mattermost/telegram
         pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(0))
@@ -222,8 +110,8 @@ def summary_for_pair(pair):
     pair_summary["trades_24h"] = len(swaps_for_pair_24h)
     last_swap_timestamp = 0
     for swap in swaps_for_pair_24h:
-        if swap["time_stamp"] > last_swap_timestamp:
-            last_swap_timestamp = swap["time_stamp"]
+        if swap["epoch"] > last_swap_timestamp:
+            last_swap_timestamp = swap["epoch"]
     pair_summary["last_swap_timestamp"] = last_swap_timestamp
     return pair_summary
 
@@ -246,19 +134,6 @@ def ticker_for_pair(pair, path_to_db, days_in_past=1):
     return pair_ticker
 
 
-# Orderbook Endpoint
-def orderbook_for_pair(pair):
-    pair = tuple(map(str, pair.split('_')))
-    if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
-        return {"error": "not valid pair"}
-    orderbook_data = OrderedDict()
-    orderbook_data["timestamp"] = "{}".format(int(datetime.now().strftime("%s")))
-    # TODO: maybe it'll be asked on API side? quite tricky to convert strings and sort the
-    orderbook_data["bids"] = get_and_parse_orderbook(pair)[0]
-    orderbook_data["asks"] = get_and_parse_orderbook(pair)[1]
-    return orderbook_data
-
-
 # Trades Endpoint
 def trades_for_pair(pair, path_to_db, days_in_past):
     pair = tuple(map(str, pair.split('_')))
@@ -268,7 +143,7 @@ def trades_for_pair(pair, path_to_db, days_in_past):
     conn.row_factory = sqlite3.Row
     sql_cursor = conn.cursor()
     timestamp_since = int((datetime.now() - timedelta(days_in_past)).strftime("%s"))
-    swaps_for_pair_since_timestamp = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_since)
+    swaps_for_pair_since_timestamp = lib_sqlite.get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_since)
     trades_info = []
     for swap_status in swaps_for_pair_since_timestamp:
         trade_info = OrderedDict()
@@ -276,32 +151,13 @@ def trades_for_pair(pair, path_to_db, days_in_past):
         trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
         trade_info["base_volume"] = swap_status["maker_amount"]
         trade_info["quote_volume"] = swap_status["taker_amount"]
-        trade_info["timestamp"] = swap_status["time_stamp"]
+        trade_info["timestamp"] = swap_status["epoch"]
         trade_info["type"] = swap_status["trade_type"]
         trades_info.append(trade_info)
     conn.close()
     return trades_info
 
 
-# Data for atomicdex.io website
-def atomicdex_info(path_to_db):
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
-    conn = sqlite3.connect(path_to_db)
-    sql_cursor = conn.cursor()
-    sql_cursor.execute("SELECT * FROM swaps;")
-    swaps_all_time = len(sql_cursor.fetchall())
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ?;", (timestamp_24h_ago,))
-    swaps_24h = len(sql_cursor.fetchall())
-    sql_cursor.execute("SELECT * FROM swaps WHERE time_stamp > ?;", (timestamp_30d_ago,))
-    swaps_30d = len(sql_cursor.fetchall())
-    conn.close()
-
-    return {
-        "swaps_all_time" : swaps_all_time,
-        "swaps_30d" : swaps_30d,
-        "swaps_24h" : swaps_24h
-    }
 
 
 def reverse_string_number(string_number):
@@ -347,7 +203,7 @@ def get_data_from_gecko():
 
 
 def get_summary_for_ticker(ticker_summary, path_to_db):
-    available_pairs_summary_ticker = get_availiable_pairs(path_to_db)
+    available_pairs_summary_ticker = get_availiable_pairs()
     summary_data = []
     for pair in available_pairs_summary_ticker:
         if ticker_summary in pair:
@@ -377,7 +233,7 @@ def get_summary_for_ticker(ticker_summary, path_to_db):
 
 
 def get_ticker_for_ticker(ticker_ticker, path_to_db, days_in_past=1):
-    available_pairs_ticker = get_availiable_pairs(path_to_db)
+    available_pairs_ticker = get_availiable_pairs()
     ticker_data = []
     for pair in available_pairs_ticker:
         if ticker_ticker in pair:
@@ -405,7 +261,7 @@ def get_ticker_for_ticker(ticker_ticker, path_to_db, days_in_past=1):
 
 
 def swaps24h_for_ticker(ticker, path_to_db, days_in_past=1):
-    available_pairs_ticker = get_availiable_pairs(path_to_db)
+    available_pairs_ticker = get_availiable_pairs()
     ticker_data = []
     for pair in available_pairs_ticker:
         if ticker in pair:
@@ -428,24 +284,27 @@ def volume_for_ticker(ticker, path_to_db, days_in_past):
     return volumes_dict
 
 def get_swaps_for_pair_24h(pair):
-    with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
-        swaps_cache_24hr_by_pair = json.load(json_file)
     data_a_b = []
     data_b_a = []
-    if f"{pair[0]}/{pair[1]}" in swaps_cache_24hr_by_pair:
-        data_a_b = swaps_cache_24hr_by_pair[f"{pair[0]}/{pair[1]}"]
-        for swap in data_a_b:
-            swap["trade_type"] = "buy"
-    if f"{pair[1]}/{pair[0]}" in swaps_cache_24hr_by_pair:
-        data_b_a = swaps_cache_24hr_by_pair[f"{pair[1]}/{pair[0]}"]
-        for swap in data_b_a:
-            swap["trade_type"] = "sell"
+    pair = pair.split("/")
+    try:
+        swaps_cache_24hr_by_pair = lib_json.get_swaps_cache_24hr_by_pair()
+        if f"{pair[0]}/{pair[1]}" in swaps_cache_24hr_by_pair:
+            data_a_b = swaps_cache_24hr_by_pair[f"{pair[0]}/{pair[1]}"]
+            for swap in data_a_b:
+                swap["trade_type"] = "buy"
+        if f"{pair[1]}/{pair[0]}" in swaps_cache_24hr_by_pair:
+            data_b_a = swaps_cache_24hr_by_pair[f"{pair[1]}/{pair[0]}"]
+            for swap in data_b_a:
+                swap["trade_type"] = "sell"
+    except Exception as e:
+        logger.warning(f"Error in [get_swaps_for_pair_24h]: {e}")
 
     return data_b_a + data_a_b
 
-def get_tickers_summary(path_to_db):
+def get_tickers_summary():
 
-    available_pairs = get_availiable_pairs(path_to_db)
+    available_pairs = get_availiable_pairs()
 
     tickers_summary = {}
     for pair in available_pairs:
@@ -472,28 +331,25 @@ def get_tickers_summary(path_to_db):
             tickers_summary.pop(summary)
     return tickers_summary
 
-
-def get_24hr_swaps_data(path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    sql = f"SELECT * FROM swaps WHERE time_stamp > {timestamp_24h_ago};"
-    sql_cursor.execute(sql)
-    return [dict(row) for row in sql_cursor.fetchall()]
-
+def get_24hr_swaps_data():
+    conn, cursor = lib_ts_db.get_timescaledb(LOCALHOST)
+    return lib_ts_db.get_swaps_data(conn, cursor, 1)
 
 # Returns last 24hrs swap data by maker/taker pair
-def get_24hr_swaps_data_by_pair(path_to_db):
-    data = get_24hr_swaps_data(path_to_db)
+def get_24hr_swaps_data_by_pair():
     pair_data = {}
-    for i in data:
-        maker = i["maker_coin"]
-        taker = i["taker_coin"]
-        pair = f"{maker}/{taker}"
-        if pair not in pair_data:
-            pair_data.update({pair:[]})
-        pair_data[pair].append(i)
+    try:
+        data = get_24hr_swaps_data()
+
+        for i in data:
+            maker = i["maker_coin"]
+            taker = i["taker_coin"]
+            pair = f"{maker}/{taker}"
+            if pair not in pair_data:
+                pair_data.update({pair:[]})
+            pair_data[pair].append(i)
+    except Exception as e:
+        logger.warning(f"Error in [get_24hr_swaps_data_by_pair] {e}")
     return pair_data
 
 

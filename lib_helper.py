@@ -2,8 +2,8 @@
 import time
 
 
-def days_ago(days):
-    return int(time.time()) - (24 * 60 * 60 * days)
+def days_ago(days=1):
+    return int(time.time()) - (24 * 60 * 60 * int(days))
 
 
 def get_error_message_id(error_msg):
