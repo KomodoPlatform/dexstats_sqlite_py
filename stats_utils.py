@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sqlite3
 import requests
 import json
@@ -54,14 +55,12 @@ def count_volumes_and_prices(swap_statuses):
         swap_prices = {}
         for swap_status in swap_statuses:
             if swap_status["trade_type"] == "buy":
-                logger.info(f'[buy] adding {swap_status["taker_amount"]} {swap_status["taker_coin"]} to quote vol for {swap_status["epoch"]}')
                 base_volume += swap_status["maker_amount"]
                 quote_volume += swap_status["taker_amount"]
 
                 swap_price = Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"])
 
             if swap_status["trade_type"] == "sell":
-                logger.info(f'[sell] adding {swap_status["maker_amount"]} {swap_status["maker_coin"]} to quote vol for {swap_status["epoch"]}')
                 base_volume += swap_status["taker_amount"]
                 quote_volume += swap_status["maker_amount"]
 
@@ -412,9 +411,22 @@ def get_tickers_summary():
             tickers_summary[ticker] = {"volume_24h": 0, "trades_24h": 0}
 
     for pair in available_pairs:
-
-        swaps_for_pair = set_pair_trade_type(pair, cache)
+        swaps_for_pair_24h = set_pair_trade_type(pair, cache)
         for swap in swaps_for_pair_24h:
+            if swap["maker_coin"] not in tickers_summary:
+                tickers_summary.update({
+                    swap["maker_coin"]: {
+                        "volume_24h": 0,
+                        "trades_24h": 0
+                    }
+                })
+            if swap["taker_coin"] not in tickers_summary:
+                tickers_summary.update({
+                    swap["taker_coin"]: {
+                        "volume_24h": 0,
+                        "trades_24h": 0
+                    }
+                })
             if swap["trade_type"] == "buy":
                 tickers_summary[swap["maker_coin"]]["volume_24h"] += swap["maker_amount"]
                 tickers_summary[swap["maker_coin"]]["trades_24h"] += 1

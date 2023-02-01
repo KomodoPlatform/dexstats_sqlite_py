@@ -16,8 +16,8 @@ from stats_utils import get_availiable_pairs, summary_for_pair, \
     get_data_from_gecko, get_summary_for_ticker, volume_for_ticker_since,\
     swaps24h_for_ticker, get_tickers_summary
 from lib_logger import logger
-from update_db import mirror_mysql_swaps_db, mirror_mysql_failed_swaps_db, update_json
 import lib_json
+import update_db
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -28,7 +28,11 @@ API_PASS = os.getenv("API_PASS")
 mm2_db = 'MM2.db'
 seednode_swaps_db = 'seednode_swaps.db'
 seednode_failed_swaps_db = 'seednode_failed_swaps.db'
+
 app = FastAPI()
+auth_api = FastAPI()
+app.mount("/private", auth_api)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,10 +81,9 @@ def update_coins_config():
 def update_db_data():
     try:
         time.sleep(10) # To offset from other db queries
-        mirror_mysql_swaps_db(1)
-        mirror_mysql_failed_swaps_db(1)
-        mirror_mysql_failed_swaps_db(1)
-        update_json()
+        update_db.mirror_mysql_swaps_db(1)
+        update_db.mirror_mysql_failed_swaps_db(1)
+        lib_json.update_json()
     except Exception as e:
         logger.info(f"Error in [update_db_data]: {e}")
         return {"Error": str(e)}
@@ -237,45 +240,44 @@ def tickers_summary():
     return get_tickers_summary()
 
 
-@app.get('/api/v1/private/24hr_pubkey_stats')
+@auth_api.get('/api/v1/private/24hr_pubkey_stats')
 def get_pubkey_stats_24h(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_pubkey_stats.json')
 
 
-@app.get('/api/v1/private/24hr_coins_stats')
+@auth_api.get('/api/v1/private/24hr_coins_stats')
 def get_coin_stats_24h(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_coins_stats.json')
 
 
-@app.get('/api/v1/private/24hr_version_stats')
+@auth_api.get('/api/v1/private/24hr_version_stats')
 def get_version_stats_24h(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_version_stats.json')
 
 
-@app.get('/api/v1/private/24hr_gui_stats')
+@auth_api.get('/api/v1/private/24hr_gui_stats')
 def get_gui_stats_24h(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_gui_stats.json')
 
 
-@app.get('/api/v1/private/24hr_failed_pubkey_stats')
+@auth_api.get('/api/v1/private/24hr_failed_pubkey_stats')
 def get_24hr_failed_pubkey_stats(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_failed_pubkey_stats.json')
 
 
-@app.get('/api/v1/private/24hr_failed_coins_stats')
+@auth_api.get('/api/v1/private/24hr_failed_coins_stats')
 def get_24hr_failed_coins_stats(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_failed_coins_stats.json')
 
 
-@app.get('/api/v1/private/24hr_failed_version_stats')
+@auth_api.get('/api/v1/private/24hr_failed_version_stats')
 def get_24hr_failed_version_stats(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_failed_version_stats.json')
 
 
-@app.get('/api/v1/private/24hr_failed_gui_stats')
+@auth_api.get('/api/v1/private/24hr_failed_gui_stats')
 def get_24hr_failed_gui_stats(username: str = Depends(authenticate_user)):
     return lib_json.get_jsonfile_data('24hr_failed_gui_stats.json')
-
 
 
 if __name__ == '__main__':

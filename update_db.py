@@ -2,29 +2,23 @@
 import sys
 import json
 import time
-from lib_json import update_json
-from lib_ts_db import import_mysql_swaps_into_timescaledb, import_mysql_failed_swaps_into_timescaledb
-from lib_mysql_db import get_swaps_data_from_mysql, get_failed_swaps_data_from_mysql
-from lib_sqlite_db import import_mysql_swaps_into_sqlite, import_mysql_failed_swaps_into_sqlite
+import lib_json
+import lib_ts_db
+import lib_mysql_db
 from lib_logger import logger
-from lib_helper import days_ago, get_error_message_id
 
 
 def mirror_mysql_swaps_db(day_since, localhost=False):
     # TODO: This should be sourced from every seednode running a similar instance of the docker container
-    result = get_swaps_data_from_mysql(day_since)
-    swaps_count_ts = import_mysql_swaps_into_timescaledb(day_since, result, localhost)
-    swaps_count_lite = import_mysql_swaps_into_sqlite(day_since, result)
-    logger.info(f"Sqlite swaps table update complete! {swaps_count_lite} records updated")
+    result = lib_mysql_db.get_swaps_data_from_mysql(day_since)
+    swaps_count_ts = lib_ts_db.import_mysql_swaps_into_timescaledb(day_since, result, localhost)
     logger.info(f"TimescaleDB swaps table update complete! {swaps_count_ts} records updated")
 
 
 def mirror_mysql_failed_swaps_db(day_since, localhost=False):
     # TODO: This should be sourced from every seednode running a similar instance of the docker container
-    result = get_failed_swaps_data_from_mysql(day_since)
-    failed_swaps_count_ts = import_mysql_failed_swaps_into_timescaledb(day_since, result, localhost)
-    failed_swaps_count_lite = import_mysql_failed_swaps_into_sqlite(day_since, result)
-    logger.info(f"Sqlite failed swaps table update complete! {failed_swaps_count_lite} records updated")
+    result = lib_mysql_db.get_failed_swaps_data_from_mysql(day_since)
+    failed_swaps_count_ts = lib_ts_db.import_mysql_failed_swaps_into_timescaledb(day_since, result, localhost)
     logger.info(f"TimescaleDB failed swaps table update complete! {failed_swaps_count_ts} records updated")
 
 
@@ -46,4 +40,4 @@ if __name__ == "__main__":
         mirror_mysql_failed_swaps_db(days, True)
 
     if sys.argv[1] == "update_json":
-        update_json(days, True)
+        lib_json.update_json(days, True)
