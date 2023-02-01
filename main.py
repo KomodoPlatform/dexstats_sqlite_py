@@ -12,8 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 import stats_utils
 import lib_mm2
-from stats_utils import get_availiable_pairs, summary_for_pair, ticker_for_pair, trades_for_pair,\
-    reverse_string_number, get_data_from_gecko, get_summary_for_ticker, get_ticker_for_ticker, volume_for_ticker,\
+from stats_utils import get_availiable_pairs, summary_for_pair, \
+    get_data_from_gecko, get_summary_for_ticker, volume_for_ticker_since,\
     swaps24h_for_ticker, get_tickers_summary
 from lib_logger import logger
 from update_db import mirror_mysql_swaps_db, mirror_mysql_failed_swaps_db, update_json
@@ -69,6 +69,7 @@ def update_coins_config():
         lib_json.write_jsonfile_data('coins_config.json', data)
     except Exception as e:
         logger.info(f"Error in [update_coins_config]: {e}")
+        return {"Error": str(e)}
 
 
 @app.on_event("startup")
@@ -82,6 +83,7 @@ def update_db_data():
         update_json()
     except Exception as e:
         logger.info(f"Error in [update_db_data]: {e}")
+        return {"Error": str(e)}
 
 
 @app.on_event("startup")
@@ -98,6 +100,7 @@ def cache_gecko_data():
         lib_json.write_jsonfile_data('gecko_cache.json', data)
     except Exception as e:
         logger.info(f"Error in [cache_gecko_data]: {e}")
+        return {"Error: ": str(e)}
 
 
 @app.on_event("startup")
@@ -107,7 +110,8 @@ def cache_swaps_data():
         data = stats_utils.get_24hr_swaps_data()
         lib_json.write_jsonfile_data('24hr_swaps_cache.json', data)
     except Exception as e:
-        logger.info(f"[cache_swaps_data]: {e}")
+        logger.info(f"Error in [cache_swaps_data]: {e}")
+        return {"Error: ": str(e)}
 
 
 @app.on_event("startup")
@@ -117,7 +121,8 @@ def cache_swaps_data_by_pair():
         data = stats_utils.get_24hr_swaps_data_by_pair()
         lib_json.write_jsonfile_data('24hr_swaps_cache_by_pair.json', data)
     except Exception as e:
-        logger.info(f"[cache_swaps_data_by_pair]: {e}")
+        logger.info(f"Error in [cache_swaps_data_by_pair]: {e}")
+        return {"Error: ": str(e)}
 
 
 @app.on_event("startup")
@@ -126,12 +131,10 @@ def cache_summary_data():
     try:
         gecko_cached_data = lib_json.get_jsonfile_data('gecko_cache.json')
         swaps_cache_24hr_by_pair = lib_json.get_jsonfile_data('24hr_swaps_cache_by_pair.json')
-
         summary_data = []
         total_usd_volume = 0
         for pair in swaps_cache_24hr_by_pair:
-
-            pair_summary = summary_for_pair(pair)
+            pair_summary = stats_utils.summary_for_pair(pair)
             summary_data.append(pair_summary)
             try:
                 base_currency_usd_vol = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
@@ -148,13 +151,12 @@ def cache_summary_data():
                 total_usd_volume += base_currency_usd_vol
             else:
                 total_usd_volume += quote_currency_usd_vol
-
         usd_vol = {"usd_volume_24h": total_usd_volume}
         lib_json.write_jsonfile_data('summary_cache.json', summary_data)
         lib_json.write_jsonfile_data('usd_volume_cache.json', usd_vol)
     except Exception as e:
-        logger.info(f"[cache_summary_data]: {e}")
-
+        logger.info(f"Error in [cache_summary_data]: {e}")
+        return {"Error": str(e)}
 
 
 @app.get('/api/v1/summary')
@@ -167,29 +169,30 @@ def usd_volume_24h():
     return lib_json.get_jsonfile_data('usd_volume_cache.json')
 
 
-@app.get('/api/v1/summary_for_ticker/{ticker_summary}')
-def summary_for_ticker(ticker_summary="KMD"):
+@app.get('/api/v1/summary_for_ticker/{ticker}')
+def summary_for_ticker(ticker="KMD"):
     try:
-        return get_summary_for_ticker(ticker_summary, seednode_swaps_db)
+        return stats_utils.get_summary_for_ticker(ticker, seednode_swaps_db)
     except Exception as e:
-        logger.info(f"[summary_for_ticker]: {e}")
+        return {"Error": str(e)}
 
 
 @app.get('/api/v1/ticker')
 def ticker():
     try:
-        available_pairs_ticker = get_availiable_pairs()
+        tickers = stats_utils.get_availiable_pairs()
         ticker_data = []
-        for pair in available_pairs_ticker:
-            ticker_data.append(ticker_for_pair(pair, seednode_swaps_db, 1))
+        for pair in tickers:
+            ticker_data.append(stats_utils.ticker_for_pair(pair, seednode_swaps_db))
         return ticker_data
     except Exception as e:
-        logger.info(f"[ticker]: {e}")
+        logger.info(f"Error in [ticker]: {e}")
+        return {"error": str(e)}
 
 
-@app.get('/api/v1/ticker_for_ticker/{ticker_ticker}')
-def ticker_for_ticker(ticker_ticker="KMD"):
-    return get_ticker_for_ticker(ticker_ticker, seednode_swaps_db, 1)
+@app.get('/api/v1/ticker_for_ticker/{ticker}')
+def ticker_for_ticker(ticker="KMD"):
+    return stats_utils.get_ticker_for_ticker(ticker, seednode_swaps_db)
 
 
 @app.get('/api/v1/swaps24/{ticker}')
@@ -203,10 +206,14 @@ def orderbook(market_pair="KMD_BTC"):
     return orderbook_data
 
 
-@app.get('/api/v1/trades/{market_pair}/{days_in_past}')
-def trades(market_pair="KMD_BTC", days_in_past=1):
-    trades_data = trades_for_pair(market_pair, seednode_swaps_db, int(days_in_past))
-    return trades_data
+@app.get('/api/v1/trades/{pair}/{days_in_past}')
+def trades(pair="KMD_BTC", days_in_past=1):
+    try:
+        trades_data = stats_utils.trades_for_pair(pair, days_in_past)
+        return trades_data
+    except Exception as e:
+        logger.info(f"Error in [trades]: {e}")
+        return {"Error": str(e)}
 
 
 @app.get('/api/v1/atomicdexio')
@@ -222,7 +229,7 @@ def fiat_rates():
 # TODO: get volumes for x days for ticker
 @app.get("/api/v1/volumes_ticker/{ticker_vol}/{days_in_past}")
 def volumes_history_ticker(ticker_vol="KMD", days_in_past=1):
-    return volume_for_ticker(ticker_vol, seednode_swaps_db, int(days_in_past))
+    return volume_for_ticker_since(ticker_vol, int(days_in_past))
 
 
 @app.get('/api/v1/tickers_summary')

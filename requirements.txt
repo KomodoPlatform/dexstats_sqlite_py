@@ -6,3 +6,4 @@ mysql-connector-python==8.0.30
 mysqlclient==2.0.3
 python-dotenv
 psycopg2>=2.7,<3.0
+pytz==2022.7.1

@@ -2,11 +2,15 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
-from datetime import timezone
+from datetime import timezone, datetime
+import pytz
+
+import lib_helper
 from lib_logger import logger
 from lib_helper import days_ago
 
 load_dotenv()
+
 
 def get_timescaledb(localhost=False):
     if localhost: host = os.getenv("POSTGRES_HOST")
@@ -43,11 +47,13 @@ def create_timescaledb_tables(conn, cursor, drop_tables=False):
             taker_gui TEXT,
             taker_version TEXT,
             taker_pubkey TEXT,
+            taker_coin_usd_price DECIMAL DEFAULT 0,
             maker_coin TEXT NOT NULL,
             maker_amount DECIMAL NOT NULL,
             maker_gui TEXT,
             maker_version TEXT,
             maker_pubkey TEXT,
+            maker_coin_usd_price DECIMAL DEFAULT 0,
             started_at TIMESTAMPTZ NOT NULL,
             epoch INT NOT NULL,
             UNIQUE (id, epoch)
@@ -175,18 +181,24 @@ def create_timescaledb_tables(conn, cursor, drop_tables=False):
             print(e)
 
 
-
-def get_timescaledb_uuids(days, table, conn, cursor):
-    sql = f"SELECT uuid FROM {table} WHERE epoch > {days_ago(days)}"
+def get_swap_uuids_since(cursor, epoch):
+    sql = f"SELECT uuid FROM swaps WHERE epoch > {epoch};"
     cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
     return results
 
 
-def import_mysql_swaps_into_timescaledb(day_since, mysql_swaps_data, localhost=False):
+def get_failed_swap_uuids_since(cursor, epoch):
+    sql = f"SELECT uuid FROM failed_swaps WHERE epoch > {epoch};"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def import_mysql_swaps_into_timescaledb(days, mysql_swaps_data, localhost=False):
     conn, cursor = get_timescaledb(localhost)
     with conn:
-        existing_uuids = get_timescaledb_uuids(day_since, "swaps", conn, cursor)
+        existing_uuids = get_swap_uuids_since(cursor, lib_helper.days_ago(days))
         imported = 0
         for x in mysql_swaps_data:
             row_data = list(x)[1:]
@@ -211,10 +223,10 @@ def import_mysql_swaps_into_timescaledb(day_since, mysql_swaps_data, localhost=F
     return imported
 
 
-def import_mysql_failed_swaps_into_timescaledb(day_since, mysql_failed_swaps_data, localhost=False):
+def import_mysql_failed_swaps_into_timescaledb(days, mysql_failed_swaps_data, localhost=False):
     conn, cursor = get_timescaledb(localhost)
     with conn:
-        existing_uuids = get_timescaledb_uuids(day_since, "failed_swaps", conn, cursor)
+        existing_uuids = get_failed_swap_uuids_since(cursor, lib_helper.days_ago(days))
         imported = 0
         for x in mysql_failed_swaps_data:
             row_data = list(x)
@@ -233,7 +245,7 @@ def import_mysql_failed_swaps_into_timescaledb(day_since, mysql_failed_swaps_dat
                              taker_gui, taker_version, taker_pubkey, maker_coin, \
                              maker_amount, maker_error_type, maker_error_msg, \
                              maker_gui, maker_version, maker_pubkey, epoch) \
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
                     cursor.execute(sql, row_data)
                     conn.commit()
                     imported += 1
@@ -247,37 +259,160 @@ def import_mysql_failed_swaps_into_timescaledb(day_since, mysql_failed_swaps_dat
     return imported
 
 
-def get_24hr_swaps(cursor, days):
-    sql = f"SELECT * FROM swaps WHERE epoch > {days_ago(days)}"
+def get_swaps_since(cursor, epoch):
+    sql = f"SELECT * FROM swaps WHERE epoch > {epoch};"
     cursor.execute(sql)
     rows = cursor.fetchall()
-    logger.info(f"{len(rows)} records returned for last 24 hours in swaps table")
+    logger.info(f"{len(rows)} records returned since {epoch} from swaps table")
     return rows
 
 
-def get_24hr_failed_swaps(cursor, days):
-    sql = f"SELECT * FROM failed_swaps WHERE epoch > {days_ago(days)}"
+def get_swaps_for_pair_since(cursor, epoch, pair):
+    print(pair)
+    sql = f"SELECT * FROM swaps WHERE epoch > {epoch} AND maker_coin = '{pair[0]}' AND taker_coin='{pair[1]}';"
     cursor.execute(sql)
     rows = cursor.fetchall()
-    logger.info(f"{len(rows)} records returned for last 24 hours in failed_swaps table")
+    logger.info(f"{len(rows)} records returned since {epoch} for {'/'.join(pair)} from swaps table")
     return rows
 
-def get_pairs(cursor, days=1):
-    sql = f"SELECT CONCAT(maker_coin, '/', taker_coin) as trading_pair \
+
+def get_swaps_json_for_pair_since(cursor, epoch, pair):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM swaps WHERE epoch > {epoch} AND maker_coin = '{pair[0]}' AND taker_coin = '{pair[1]}') row;"
+    logger.info(sql)
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    rows = [i[0] for i in rows]
+    logger.info(f"{len(rows)} records returned since {epoch} for {'/'.join(pair)} from swaps table")
+    return rows
+
+def get_bidirectional_swaps_json_by_pair_since(cursor, epoch, pair):
+    pair = lib_helper.get_pair_tickers(pair)
+    sql = f"SELECT row_to_json(t) FROM ( \
+                SELECT * FROM swaps \
+                WHERE epoch > {epoch} AND maker_coin IN ('{pair[0]}', '{pair[1]}') \
+                AND taker_coin IN ('{pair[0]}', '{pair[1]}')) t;"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    rows = [i[0] for i in rows]
+
+    logger.info(f"{len(rows)} records returned since {epoch} for {'/'.join(pair)} & {pair[1]}/{pair[0]}  from swaps table")
+    return rows
+
+def get_bidirectional_swaps_json_by_pair_since_by_date(cursor, epoch, pair):
+    pair = lib_helper.get_pair_tickers(pair)
+    sql = f"SELECT row_to_json(t) FROM ( \
+                SELECT * FROM swaps \
+                WHERE epoch > {epoch} AND maker_coin IN ('{pair[0]}', '{pair[1]}') \
+                AND taker_coin IN ('{pair[0]}', '{pair[1]}')) t;"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    rows = [i[0] for i in rows]
+
+    logger.info(f"{len(rows)} records returned since {epoch} for {'/'.join(pair)} & {pair[1]}/{pair[0]}  from swaps table")
+    return rows
+
+# HYPER TABLE QUERY
+def get_pair_volumes_by_day_since_bucket(cursor, epoch, pair):
+    sql = f"SELECT row_to_json(t) FROM ( \
+                SELECT time_bucket(86400, epoch) AS date,  \
+                    taker_coin, SUM(taker_amount) as sum_taker_volume, \
+                    MIN(maker_amount/taker_amount) as min_taker_price, \
+                    MAX(maker_amount/taker_amount) as max_taker_price, \
+                    maker_coin, SUM(maker_amount) as sum_maker_volume, \
+                    MIN(taker_amount/maker_amount) as min_maker_price, \
+                    MAX(taker_amount/maker_amount) as max_maker_price, \
+                    COUNT(*) as pair_swap_count  \
                 FROM swaps \
-                WHERE epoch > {days_ago(days)} \
+                WHERE epoch > {epoch} AND maker_coin IN ('{pair[0]}', '{pair[1]}') \
+                            AND taker_coin IN ('{pair[0]}', '{pair[1]}') \
+                GROUP BY date, maker_coin, taker_coin \
+                ORDER BY date DESC \
+            ) t;"
+    #logger.info(sql)
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    rows = [i[0] for i in rows]
+    for i in rows:
+        i.update({"date": datetime.fromtimestamp(i["date"], tz = pytz.UTC).strftime('%Y-%m-%d')})
+    return rows
+
+
+def get_failed_swaps_since(cursor, epoch):
+    sql = f"SELECT * FROM failed_swaps WHERE epoch >= {epoch};"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    logger.info(f"{len(rows)} records returned since {epoch} from failed_swaps table")
+    return rows
+
+
+def get_swaps_between(cursor, start_epoch, end_epoch):
+    sql = f"SELECT * FROM swaps WHERE epoch >= {start_epoch} AND epoch < {end_epoch};"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    logger.info(f"{len(rows)} records returned between {start_epoch} - {end_epoch} from swaps table")
+    return rows
+
+
+def get_failed_swaps_between(cursor, start_epoch, end_epoch):
+    sql = f"SELECT * FROM failed_swaps WHERE epoch >= {start_epoch} AND epoch < {end_epoch};"
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    logger.info(f"{len(rows)} records returned between {start_epoch} - {end_epoch} from failed_swaps table")
+    return rows
+
+
+def get_swaps_json_since(cursor, epoch):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM swaps WHERE epoch >= {epoch}) row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def get_failed_swaps_json_since(cursor, epoch):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM failed_swaps WHERE epoch >= {epoch}) row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def get_swaps_json_between(cursor, start_epoch, end_epoch):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM swaps WHERE epoch >= {start_epoch} AND epoch < {end_epoch}) row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def get_failed_swaps_json_between(cursor, start_epoch, end_epoch):
+    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM failed_swaps WHERE epoch >= {start_epoch} AND epoch < {end_epoch}) row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
+
+
+def get_pairs_since(cursor, epoch):
+    sql = f"SELECT DISTINCT CONCAT(maker_coin, '/', taker_coin) as trading_pair \
+                FROM swaps \
+                WHERE epoch >= {epoch} \
                 GROUP BY maker_coin, taker_coin \
                 ORDER BY trading_pair;"
     cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
-    logger.info(f"{len(results)} records returned for get_pairs")
     return results
 
 
+def get_pairs_between(cursor, start_epoch, end_epoch):
+    sql = f"SELECT DISTINCT CONCAT(maker_coin, '/', taker_coin) as trading_pair \
+                FROM swaps \
+                WHERE epoch >= {start_epoch} AND epoch < {end_epoch} \
+                GROUP BY maker_coin, taker_coin \
+                ORDER BY trading_pair;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    return results
 
 
-def get_swaps_stats(cursor, days):
-    last_price_data = get_pairs_last_price(cursor, days)
+def get_swaps_stats_since(cursor, epoch):
+    last_price_data = get_pairs_last_price_since(cursor, epoch)
     sql = f"SELECT row_to_json(row) FROM ( \
                 SELECT \
                     CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
@@ -289,7 +424,7 @@ def get_swaps_stats(cursor, days):
                     MIN(taker_amount/maker_amount) AS min_maker_price, MIN(maker_amount/taker_amount) AS min_taker_price, \
                     COUNT(maker_coin) AS count_swaps \
                 FROM swaps \
-                WHERE epoch > {days_ago(days)} \
+                WHERE epoch >= {lib_helper.days_ago(epoch)} \
                 GROUP BY maker_coin, taker_coin \
                 ORDER BY trading_pair) \
             row;"
@@ -302,7 +437,78 @@ def get_swaps_stats(cursor, days):
     return results
 
 
-def get_pairs_last_price(cursor, days, as_dict=True):
+def get_swaps_stats_between(cursor, start_epoch, end_epoch):
+    last_price_data = get_pairs_last_price_between(cursor, start_epoch, end_epoch)
+    sql = f"SELECT row_to_json(row) FROM ( \
+                SELECT \
+                    CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
+                    maker_coin as base_currency, taker_coin as quote_currency, \
+                    SUM(maker_amount) AS base_volume, SUM(taker_amount) AS quote_volume, \
+                    MAX(maker_amount) AS max_maker_amount, MAX(taker_amount) AS max_taker_amount, \
+                    AVG(taker_amount/maker_amount) AS avg_maker_price, AVG(maker_amount/taker_amount) AS avg_taker_price, \
+                    MAX(taker_amount/maker_amount) AS max_maker_price, MAX(maker_amount/taker_amount) AS max_taker_price, \
+                    MIN(taker_amount/maker_amount) AS min_maker_price, MIN(maker_amount/taker_amount) AS min_taker_price, \
+                    COUNT(maker_coin) AS count_swaps \
+                FROM swaps \
+                WHERE epoch >= {start_epoch} AND epoch < {end_epoch} \
+                GROUP BY maker_coin, taker_coin \
+                ORDER BY trading_pair) \
+            row;"
+    cursor.execute(sql)
+    results = [i[0] for i in cursor.fetchall()]
+    for i in results:
+        i.update({"last_price": last_price_data[i["trading_pair"]]})
+        print(i)
+    logger.info(f"{len(results)} records returned for get_swaps_stats")
+    return results
+
+
+def get_24hr_swaps(cursor):
+    rows = get_swaps_since(cursor, lib_helper.days_ago(1))
+    return rows
+
+
+def get_24hr_failed_swaps(cursor):
+    rows = get_failed_swaps_since(cursor, lib_helper.days_ago(1))
+    return rows
+
+
+def get_24hr_pairs(cursor):
+    rows = get_pairs_since(cursor, lib_helper.days_ago(1))
+    return rows
+
+
+def get_30d_swaps(cursor):
+    rows = get_swaps_since(cursor, lib_helper.days_ago(30))
+    return rows
+
+
+def get_30d_failed_swaps(cursor):
+    rows = get_failed_swaps_since(cursor, lib_helper.days_ago(30))
+    return rows
+
+
+def get_30d_pairs(cursor):
+    rows = get_pairs_since(cursor, lib_helper.days_ago(30))
+    return rows
+
+
+def get_all_swaps(cursor):
+    rows = get_swaps_since(cursor, 0)
+    return rows
+
+
+def get_all_failed_swaps(cursor):
+    rows = get_failed_swaps_since(cursor, 0)
+    return rows
+
+
+def get_all_pairs(cursor):
+    rows = get_pairs_since(cursor, 0)
+    return rows
+
+
+def get_pairs_last_price_since(cursor, epoch, as_dict=True):
     sql = f"SELECT row_to_json(row) FROM ( \
                 SELECT \
                     CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
@@ -316,11 +522,10 @@ def get_pairs_last_price(cursor, days, as_dict=True):
                         RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING \
                     ) as last_price \
                 FROM swaps \
-                WHERE epoch > {days_ago(days)})\
+                WHERE epoch >= {epoch})\
             row WHERE row_num = 1;"
     cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
-    logger.info(f"{len(results)} records returned for get_pairs_last_price")
 
     if as_dict:
         results_dict = {}
@@ -330,11 +535,45 @@ def get_pairs_last_price(cursor, days, as_dict=True):
     return results
 
 
-def get_swaps_data(conn, cursor, days=1):
-    sql = f"SELECT row_to_json(row) FROM (SELECT * FROM swaps WHERE epoch > {days_ago(1)}) row;"
+def get_pairs_last_price_between(cursor, start_epoch, end_epoch, as_dict=True):
+    sql = f"SELECT row_to_json(row) FROM ( \
+                SELECT \
+                    CONCAT(maker_coin, '/', taker_coin) as trading_pair, \
+                    ROW_NUMBER() OVER ( \
+                        PARTITION BY (maker_coin, taker_coin) ORDER BY epoch \
+                        RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING \
+                    ) as row_num, \
+                     LAST_VALUE(maker_amount/taker_amount) \
+                    OVER ( \
+                        PARTITION BY (maker_coin, taker_coin) ORDER BY epoch \
+                        RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING \
+                    ) as last_price \
+                FROM swaps \
+                WHERE epoch >= {start_epoch} AND epoch < {end_epoch})\
+            row WHERE row_num = 1;"
     cursor.execute(sql)
     results = [i[0] for i in cursor.fetchall()]
+
+    if as_dict:
+        results_dict = {}
+        for i in results:
+            results_dict.update({i["trading_pair"]: i})
+        return results_dict
     return results
+
+
+def get_ts_version(cursor):
+    sql = "SELECT extversion FROM pg_extension where extname = 'timescaledb';"
+    cursor.execute(sql)
+    results = cursor.fetchall()
+    return results
+
+def get_hypertables(cursor):
+    sql = "SELECT * FROM timescaledb_information.hypertables;"
+    cursor.execute(sql)
+    results = cursor.fetchall()
+    return results
+
 
 
 if __name__ == '__main__':

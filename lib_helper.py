@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import time
+from decimal import Decimal
 
 
 def days_ago(days=1):
@@ -23,3 +24,25 @@ def get_error_message_id(error_msg):
         return "balance error"
         
     return error_msg
+
+
+def reverse_string_number(string_number):
+    if Decimal(string_number) != 0:
+        return "{:.10f}".format(1 / Decimal(string_number))
+    else:
+        return string_number
+
+
+def validate_pair(pair):
+    pair = tuple(map(str, pair.split('_')))
+    if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
+        return False
+    return True
+
+def get_pair_tickers(pair):
+    if not isinstance(pair, list):
+        if pair.find("/") > -1:
+            pair = pair.split("/")
+        elif pair.find("_") > -1:
+            pair = pair.split("_")
+    return pair

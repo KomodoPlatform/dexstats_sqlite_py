@@ -147,7 +147,7 @@ def update_json(days=1, localhost=False):
 
     with conn:
         # Get 24 hour swap stats
-        swaps = lib_ts_db.get_24hr_swaps(cursor, days)
+        swaps = lib_ts_db.get_24hr_swaps(cursor)
 
         pubkey_data = get_pubkey_data(swaps)
         with open("24hr_pubkey_stats.json", "w+") as f:
@@ -168,7 +168,7 @@ def update_json(days=1, localhost=False):
         value_data = get_value_data(swaps)
 
         # Get 24 hour swap stats
-        failed_swaps = lib_ts_db.get_24hr_failed_swaps(cursor, days)
+        failed_swaps = lib_ts_db.get_24hr_failed_swaps(cursor)
 
         failed_pubkey_data = get_failed_pubkey_data(failed_swaps)
         with open("24hr_failed_pubkey_stats.json", "w+") as f:
@@ -190,7 +190,7 @@ def update_json(days=1, localhost=False):
     conn.close()
 
 
-def get_swaps_cache_24hr_by_pair():
+def get_24hr_swaps_by_pair_cache():
     with open('24hr_swaps_cache_by_pair.json', 'r') as json_file:
         return json.load(json_file)
 
