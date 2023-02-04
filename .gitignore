@@ -1,0 +1,8 @@
+__pycache__/
+*.json
+*.txt
+*.csv
+*.log
+*.db
+.env
+MM2.db
