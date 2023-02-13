@@ -26,8 +26,7 @@ def cache_gecko_data():
         with open('gecko_cache.json', 'w') as json_file:
             json_file.write(json.dumps(gecko_data))
     except Exception as e:
-        print(e)
-    print("saved gecko data to file")
+        print(f"Error in [cache_gecko_data]: {e}")
 
 @app.get('/api/v1/summary')
 def summary():
