@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 import stats_utils
+from lib_logger import logger
 
 load_dotenv()
 API_HOST = os.getenv('API_HOST')
@@ -24,28 +25,32 @@ app.add_middleware(
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
-    gecko_data = stats_utils.get_data_from_gecko()
+    logger.info(f"Getting gecko_data")
     try:
-        with open('gecko_cache.json', 'w') as json_file:
-            json_file.write(json.dumps(gecko_data))
+        gecko_data = stats_utils.get_data_from_gecko()
     except Exception as e:
-        print(e)
-    print("saved gecko data to file")
+        #logger.info(f"Error in [cache_gecko_data]: {e}")
+        pass
+    if "error" not in gecko_data:
+        with open('gecko_cache.json', 'w+') as f:
+            json.dump(gecko_data, f)
+        logger.info("Updated gecko_cache.json")
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every minute
+@repeat_every(seconds=30)  # caching data every minute
 def cache_summary_data():
-    available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
-    summary_data = []
-    for pair in available_pairs:
-        summary_data.append(summary_for_pair(pair, MM2_DB_PATH))
     try:
-        with open('summary_cache.json', 'w') as json_file:
-            json_file.write(json.dumps(summary_data))
+        logger.info(f"Getting summary_data")
+        available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
+        summary_data = []
+        for pair in available_pairs:
+            summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
+        with open('summary_cache.json', 'w+') as f:
+            json.dump(summary_data, f)
     except Exception as e:
-        print(e)
-    print("saved summary data to file")
+        logger.info(f"Error in [cache_summary_data]: {e}")
+    logger.info("Updated summary_cache.json")
 
 
 @app.get('/api/v1/summary')
