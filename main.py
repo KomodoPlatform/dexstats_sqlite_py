@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
-from stats_utils import get_swaps_since_timestamp_by_pair
+import stats_utils
 
 path_to_db = '/DB/43ec929fe30ee72be42c9162c56dde910a05e50d/MM2.db'
 app = FastAPI()
@@ -31,6 +31,35 @@ def cache_gecko_data():
     print("saved gecko data to file")
 
 
+
+@app.on_event("startup")
+@repeat_every(seconds=60)  # caching data every 1 minute
+def cache_summary():
+    try:
+        print(f"Updating summary cache")
+        available_pairs = stats_utils.get_availiable_pairs(path_to_db)
+        timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
+        swaps_24hr_by_pair =  stats_utils.get_swaps_since_timestamp_by_pair(path_to_db, timestamp_24h_ago)
+        summary_data = []
+        for pair in available_pairs:
+            summary_data.append(stats_utils.summary_for_pair(pair, swaps_24hr_by_pair))
+        with open('summary_cache.json', 'w+') as cache_file:
+            print(f"Summary cache updated!")
+            json.dump(summary_data, cache_file)
+    except Exception as e:
+        print(f"Error in [cache_summary]: {e}")
+
+
+@app.get('/api/v1/summary')
+def summary():
+    try:
+        with open('summary_cache.json', 'r') as json_file:
+            summary_cached_data = json.load(json_file)
+            return summary_cached_data
+    except:
+        return {}
+
+'''
 @app.get('/api/v1/summary')
 def summary():
     available_pairs = stats_utils.get_availiable_pairs(path_to_db)
@@ -40,7 +69,7 @@ def summary():
     for pair in available_pairs:
         summary_data.append(stats_utils.summary_for_pair(pair, swaps_24hr_by_pair))
     return summary_data
-
+'''
 
 @app.get('/api/v1/ticker')
 def ticker():
