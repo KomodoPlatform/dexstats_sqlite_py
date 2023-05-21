@@ -5,16 +5,7 @@ import logging
 from decimal import Decimal
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from logger import CustomFormatter
-
-# create logger with 'destats_app'
-logger = logging.getLogger("destats_app")
-logger.setLevel(logging.DEBUG)
-
-# create console handler with a higher log level
-handler = logging.StreamHandler()
-handler.setFormatter(CustomFormatter())
-logger.addHandler(handler)
+from logger import logger
 
 
 # getting list of pairs with amount of swaps > 0 from db (list of tuples)
@@ -297,14 +288,8 @@ def get_last_price_for_pair(pair, path_to_db):
     conn.row_factory = sqlite3.Row
     sql_cursor = conn.cursor()
     sorted_pair = tuple(sorted(pair))
-    logger.info(pair)
-    logger.info(sorted_pair)
-    if pair[0] == sorted_pair[0]:
-        coin_a = pair[0]
-        coin_b = pair[1]
-    else:
-        coin_a = pair[1]
-        coin_b = pair[0]
+    coin_a = pair[0]
+    coin_b = pair[1]
 
     sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_a}' and taker_coin_ticker='{coin_b}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
     sql_cursor.execute(sql)
@@ -329,6 +314,8 @@ def get_last_price_for_pair(pair, path_to_db):
     elif swap_price: swap_price = swap_price
     elif swap_price2: swap_price = swap_price2
     else: swap_price = 0
+    if pair[0] != sorted_pair[0]:
+        swap_price = 1/swap_price
     return swap_price
 
 
@@ -361,7 +348,7 @@ def get_data_from_gecko():
         r = ""
         try:
             url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_ids}&vs_currencies=usd'
-            logger.info(url)
+            #logger.debug(url)
             gecko_data = requests.get(url).json()
         except Exception as e:
             return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
