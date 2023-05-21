@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 import stats_utils
+from lib_logger import logger
+from datetime import datetime, timedelta
 
 load_dotenv()
 API_HOST = os.getenv('API_HOST')
@@ -24,34 +26,61 @@ app.add_middleware(
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
-    gecko_data = stats_utils.get_data_from_gecko()
-    if "error" not in gecko_data:
-        try:
+    try:
+        gecko_data = stats_utils.get_data_from_gecko()
+        if "error" not in gecko_data:
             with open('gecko_cache.json', 'w') as json_file:
                 json_file.write(json.dumps(gecko_data))
-        except Exception as e:
-            #print(e)
-            pass
-        print("saved gecko data to file")
+                print("saved gecko data to file")
+    except Exception as e:
+        print(e)
+        pass
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every minute
+@repeat_every(seconds=30)  # caching data every minute
 def cache_summary_data():
     try:
+        logger.info(f"Getting summary_data")
         available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
         summary_data = []
         for pair in available_pairs:
             summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
-        with open('summary_cache.json', 'w') as json_file:
-            json_file.write(json.dumps(summary_data))
+        with open('summary_cache.json', 'w+') as f:
+            json.dump(summary_data, f)
+            logger.info("Updated summary_cache.json")
     except Exception as e:
-        print(e)
-    print("saved summary data to file")
+        logger.info(f"Error in [cache_summary_data]: {e}")
+
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60)  # caching data every 1 minute
+def cache_summary():
+    try:
+        print(f"Updating summary cache")
+        available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
+        timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
+        swaps_24hr_by_pair =  stats_utils.get_swaps_since_timestamp_by_pair(MM2_DB_PATH, timestamp_24h_ago)
+        summary_data = []
+        for pair in available_pairs:
+            summary_data.append(stats_utils.summary_for_pair(pair, swaps_24hr_by_pair))
+        with open('summary_cache.json', 'w+') as cache_file:
+            print(f"Summary cache updated!")
+            json.dump(summary_data, cache_file)
+    except Exception as e:
+        print(f"Error in [cache_summary]: {e}")
 
 
 @app.get('/api/v1/summary')
 def summary():
+    try:
+        with open('summary_cache.json', 'r') as json_file:
+            summary_cached_data = json.load(json_file)
+            return summary_cached_data
+    except:
+        return {}
+
     with open('summary_cache.json', 'r') as json_file:
         summary_cache_data = json.load(json_file)
         return summary_cache_data

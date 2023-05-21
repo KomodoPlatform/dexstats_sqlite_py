@@ -22,7 +22,6 @@ def get_availiable_pairs(path_to_db):
     return list(set(sorted_available_pairs))
 
 
-
 # tuple, integer -> list (with swap status dicts)
 # select from DB swap statuses for desired pair with timestamps > than provided
 def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
@@ -33,7 +32,6 @@ def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
         swap["trade_type"] = "buy"
     sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND taker_coin_ticker=? AND maker_coin_ticker=? AND is_success=1;", t)
     swap_statuses_b_a = [dict(row) for row in sql_cursor.fetchall()]
-    # should be enough to change amounts place = change direction
     for swap in swap_statuses_b_a:
         temp_maker_amount = swap["maker_amount"]
         swap["maker_amount"] = swap["taker_amount"]
@@ -114,17 +112,21 @@ def count_volumes_and_prices(swap_statuses, pair, path_to_db):
 
     return pair_volumes_and_prices
 
+
 # tuple, string, string -> list
 # returning orderbook for given trading pair
 def get_mm2_orderbook_for_pair(pair):
-    mm2_host = "http://127.0.0.1:7783"
-    params = {
-              'method': 'orderbook',
-              'base': pair[0],
-              'rel': pair[1]
-             }
-    r = requests.post(mm2_host, json=params)
-    return json.loads(r.text)
+    try:
+        mm2_host = "http://127.0.0.1:7783"
+        params = {
+                  'method': 'orderbook',
+                  'base': pair[0],
+                  'rel': pair[1]
+                 }
+        r = requests.post(mm2_host, json=params)
+        return json.loads(r.text)
+    except Exception as e:
+        print(f"Error in [get_mm2_orderbook_for_pair]: {e}")
 
 
 # list -> string
@@ -333,28 +335,25 @@ def get_data_from_gecko():
             coin_ids.append(coin_id)
     coin_ids = list(set(coin_ids))
     coin_ids.sort()
-    max_coins_per_request = 200
-
-    chunk_list = list(get_chunks(coin_ids, max_coins_per_request))
-    for chunk in chunk_list:
-        chunk_coin_ids = ",".join(chunk)
-        r = ""
-        try:
-            url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_coin_ids}&vs_currencies=usd'
-            gecko_data = requests.get(url).json()
-        except Exception as e:
-            return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}    
-        try:
-            for coin in coin_ids_dict:
-                coin_id = coin_ids_dict[coin]["coingecko_id"]
-                if coin_id != "na" and coin_id != "" and coin_id != "test-coin" and coin_id in gecko_data:
-                    if "usd" in gecko_data[coin_id]:
-                        coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
-                else:
-                    coin_ids_dict[coin]["usd_price"] = 0
-        except Exception as e:
-            print(f'Error in [get_data_from_gecko]: {e}')
-        return coin_ids_dict
+    coin_ids = ",".join(coin_ids)
+    r = ""
+    try:
+        url = f'https://api.coingecko.com/api/v3/simple/price?ids={coin_ids}&vs_currencies=usd'
+        r = requests.get(url)
+    except Exception as e:
+        return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
+    gecko_data = r.json()
+    try:
+        for coin in coin_ids_dict:
+            coin_id = coin_ids_dict[coin]["coingecko_id"]
+            if coin_id != "na" and coin_id != "" and coin_id != "test-coin" and coin_id in gecko_data:
+                if "usd" in gecko_data[coin_id]:
+                    coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+            else:
+                coin_ids_dict[coin]["usd_price"] = 0
+    except Exception as e:
+        print(f'Error in [get_data_from_gecko]: {e}')
+    return coin_ids_dict
 
 # Data for atomicdex.io website
 def atomicdex_info(path_to_db):
