@@ -7,16 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 import stats_utils
-from logger import CustomFormatter
+from logger import logger
 
-# create logger with 'destats_app'
-logger = logging.getLogger("destats_app")
-logger.setLevel(logging.DEBUG)
-
-# create console handler with a higher log level
-handler = logging.StreamHandler()
-handler.setFormatter(CustomFormatter())
-logger.addHandler(handler)
 
 load_dotenv()
 API_HOST = os.getenv('API_HOST')
@@ -48,7 +40,7 @@ def cache_gecko_data():
 
 
 @app.on_event("startup")
-@repeat_every(seconds=30)  # caching data every minute
+@repeat_every(seconds=60)  # caching data every minute
 def cache_summary_data():
     try:
         logger.info(f"Getting summary_data")
@@ -61,6 +53,14 @@ def cache_summary_data():
     except Exception as e:
         logger.info(f"Error in [cache_summary_data]: {e}")
     logger.info("Updated summary_cache.json")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=600)  # caching data every 10 minutes
+def cache_atomicdex_io():
+    data = stats_utils.atomicdex_info(MM2_DB_PATH)
+    with open('adex_cache.json', 'w+') as cache_file:
+        json.dump(data, cache_file)
 
 
 @app.get('/api/v1/summary')
@@ -96,14 +96,6 @@ def trades(market_pair="KMD_BTC"):
         raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
     trades_data = stats_utils.trades_for_pair(market_pair, MM2_DB_PATH)
     return trades_data
-
-
-@app.on_event("startup")
-@repeat_every(seconds=600)  # caching data every 10 minutes
-def cache_atomicdex_io():
-    data = stats_utils.atomicdex_info(MM2_DB_PATH)
-    with open('adex_cache.json', 'w+') as cache_file:
-        json.dump(data, cache_file)
 
 
 @app.get('/api/v1/atomicdexio')
