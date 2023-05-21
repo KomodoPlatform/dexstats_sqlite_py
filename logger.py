@@ -40,3 +40,12 @@ class CustomFormatter(logging.Formatter):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
+
+# create logger with 'destats_app'
+logger = logging.getLogger("dexstats_app")
+logger.setLevel(logging.DEBUG)
+
+# create console handler with a higher log level
+handler = logging.StreamHandler()
+handler.setFormatter(CustomFormatter())
+logger.addHandler(handler)
