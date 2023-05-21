@@ -43,11 +43,42 @@ def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
     return swap_statuses
 
 
+def get_last_price_for_pair(pair, path_to_db):
+    conn = sqlite3.connect(path_to_db)
+    conn.row_factory = sqlite3.Row
+    sql_cursor = conn.cursor()
+
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[0]}' and taker_coin_ticker='{pair[1]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql_cursor.execute(sql)
+    resp = sql_cursor.fetchone()
+    try:
+        swap_price = Decimal(resp["taker_amount"]) / Decimal(resp["maker_amount"])
+        swap_time = resp["started_at"]
+    except:
+        swap_price = None
+
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[1]}' and taker_coin_ticker='{pair[0]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql_cursor.execute(sql)
+    resp2 = sql_cursor.fetchone()
+    try: 
+        swap_price2 = 1/(Decimal(resp2["taker_amount"]) / Decimal(resp2["maker_amount"]))
+        swap_time2 = resp2["started_at"]
+    except: 
+        swap_price2 = None
+    if swap_price and swap_price2:
+        if swap_time > swap_time2:
+            return swap_price
+    if swap_price and swap_price2: swap_price = (swap_price + swap_price2) / 2
+    elif swap_price: swap_price = swap_price
+    elif swap_price2: swap_price = swap_price2
+    else: swap_price = 0
+    return swap_price
+
 
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
 # last_price, base_volume, quote_volume, highest_price_24h, lowest_price_24h, price_change_percent_24h
-def count_volumes_and_prices(swap_statuses):
+def count_volumes_and_prices(swap_statuses, pair, path_to_db):
     try:
         pair_volumes_and_prices = {}
         base_volume = 0
@@ -74,7 +105,8 @@ def count_volumes_and_prices(swap_statuses):
     try:
         pair_volumes_and_prices["last_price"] = swap_prices[max(swap_prices.keys())]
     except ValueError:
-        pair_volumes_and_prices["last_price"] = 0
+        # Get the most recent price from DB.
+        pair_volumes_and_prices["last_price"] = get_last_price_for_pair(pair, path_to_db)
     try:
         pair_volumes_and_prices["price_change_percent_24h"] = ( swap_prices[max(swap_prices.keys())] - swap_prices[min(swap_prices.keys())] ) / Decimal(100)
     except ValueError:
@@ -184,11 +216,11 @@ def get_and_parse_orderbook(pair):
 def summary_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
-    sql_coursor = conn.cursor()
+    sql_cursor = conn.cursor()
     pair_summary = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_coursor, pair, timestamp_24h_ago)
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
+    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     orderbook = get_mm2_orderbook_for_pair(pair)
@@ -234,7 +266,7 @@ def ticker_for_pair(pair, path_to_db):
     pair_ticker = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
     swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
+    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_ticker[pair[0] + "_" + pair[1]] = OrderedDict()
     pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     pair_ticker[pair[0] + "_" + pair[1]]["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
@@ -280,6 +312,10 @@ def trades_for_pair(pair, path_to_db):
     return trades_info
 
 
+def get_chunks(data, chunk_length):
+    for i in range(0, len(data), chunk_length):
+        yield data[i:i + chunk_length]
+
 def get_data_from_gecko():
     coin_ids_dict = {}
     with open("coins_config.json", "r") as coins_json:
@@ -293,29 +329,32 @@ def get_data_from_gecko():
     coin_ids = []
     for coin in coin_ids_dict:
         coin_id = coin_ids_dict[coin]["coingecko_id"]
-        if coin_id != "na" and coin_id != "test-coin":
+        if coin_id not in ["na", "test-coin", ""]:
             coin_ids.append(coin_id)
     coin_ids = list(set(coin_ids))
     coin_ids.sort()
-    coin_ids = ",".join(coin_ids)
-    r = ""
-    try:
-        url = f'https://api.coingecko.com/api/v3/simple/price?ids={coin_ids}&vs_currencies=usd'
-        r = requests.get(url)
-    except Exception as e:
-        return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
-    gecko_data = r.json()
-    try:
-        for coin in coin_ids_dict:
-            coin_id = coin_ids_dict[coin]["coingecko_id"]
-            if coin_id != "na" and coin_id != "" and coin_id != "test-coin" and coin_id in gecko_data:
-                if "usd" in gecko_data[coin_id]:
-                    coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
-            else:
-                coin_ids_dict[coin]["usd_price"] = 0
-    except Exception as e:
-        print(f'Error in [get_data_from_gecko]: {e}')
-    return coin_ids_dict
+    max_coins_per_request = 200
+
+    chunk_list = list(get_chunks(coin_ids, max_coins_per_request))
+    for chunk in chunk_list:
+        chunk_coin_ids = ",".join(chunk)
+        r = ""
+        try:
+            url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_coin_ids}&vs_currencies=usd'
+            gecko_data = requests.get(url).json()
+        except Exception as e:
+            return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}    
+        try:
+            for coin in coin_ids_dict:
+                coin_id = coin_ids_dict[coin]["coingecko_id"]
+                if coin_id != "na" and coin_id != "" and coin_id != "test-coin" and coin_id in gecko_data:
+                    if "usd" in gecko_data[coin_id]:
+                        coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                else:
+                    coin_ids_dict[coin]["usd_price"] = 0
+        except Exception as e:
+            print(f'Error in [get_data_from_gecko]: {e}')
+        return coin_ids_dict
 
 # Data for atomicdex.io website
 def atomicdex_info(path_to_db):

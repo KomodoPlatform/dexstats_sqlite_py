@@ -25,22 +25,24 @@ app.add_middleware(
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
     gecko_data = stats_utils.get_data_from_gecko()
-    try:
-        with open('gecko_cache.json', 'w') as json_file:
-            json_file.write(json.dumps(gecko_data))
-    except Exception as e:
-        print(e)
-    print("saved gecko data to file")
+    if "error" not in gecko_data:
+        try:
+            with open('gecko_cache.json', 'w') as json_file:
+                json_file.write(json.dumps(gecko_data))
+        except Exception as e:
+            #print(e)
+            pass
+        print("saved gecko data to file")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_summary_data():
-    available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
-    summary_data = []
-    for pair in available_pairs:
-        summary_data.append(summary_for_pair(pair, MM2_DB_PATH))
     try:
+        available_pairs = stats_utils.get_availiable_pairs(MM2_DB_PATH)
+        summary_data = []
+        for pair in available_pairs:
+            summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
         with open('summary_cache.json', 'w') as json_file:
             json_file.write(json.dumps(summary_data))
     except Exception as e:
@@ -53,6 +55,13 @@ def summary():
     with open('summary_cache.json', 'r') as json_file:
         summary_cache_data = json.load(json_file)
         return summary_cache_data
+
+
+@app.get('/api/v1/last_price/{pair}')
+def get_last_price_for_pair(pair="KMD_LTC"):
+    pair = pair.split("_")
+    last_price = stats_utils.get_last_price_for_pair(pair, MM2_DB_PATH)
+    return last_price
 
 
 @app.get('/api/v1/ticker')
