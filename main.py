@@ -1,12 +1,22 @@
 import uvicorn
 import json
 import os
+import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
 import stats_utils
-from lib_logger import logger
+from logger import CustomFormatter
+
+# create logger with 'destats_app'
+logger = logging.getLogger("destats_app")
+logger.setLevel(logging.DEBUG)
+
+# create console handler with a higher log level
+handler = logging.StreamHandler()
+handler.setFormatter(CustomFormatter())
+logger.addHandler(handler)
 
 load_dotenv()
 API_HOST = os.getenv('API_HOST')
@@ -47,29 +57,10 @@ def cache_summary_data():
         for pair in available_pairs:
             summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
         with open('summary_cache.json', 'w+') as f:
-            json.dump(summary_data, f)
+            json.dump(summary_data, f, indent=4)
     except Exception as e:
         logger.info(f"Error in [cache_summary_data]: {e}")
     logger.info("Updated summary_cache.json")
-
-
-
-@app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every 1 minute
-def cache_summary():
-    try:
-        print(f"Updating summary cache")
-        available_pairs = stats_utils.get_availiable_pairs(path_to_db)
-        timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-        swaps_24hr_by_pair =  stats_utils.get_swaps_since_timestamp_by_pair(path_to_db, timestamp_24h_ago)
-        summary_data = []
-        for pair in available_pairs:
-            summary_data.append(stats_utils.summary_for_pair(pair, swaps_24hr_by_pair))
-        with open('summary_cache.json', 'w+') as cache_file:
-            print(f"Summary cache updated!")
-            json.dump(summary_data, cache_file)
-    except Exception as e:
-        print(f"Error in [cache_summary]: {e}")
 
 
 @app.get('/api/v1/summary')
@@ -80,10 +71,6 @@ def summary():
             return summary_cached_data
     except:
         return {}
-
-    with open('summary_cache.json', 'r') as json_file:
-        summary_cache_data = json.load(json_file)
-        return summary_cache_data
 
 
 @app.get('/api/v1/ticker')
@@ -124,6 +111,13 @@ def atomicdex_info_api():
     with open('adex_cache.json', 'r') as json_file:
         adex_cached_data = json.load(json_file)
         return adex_cached_data
+
+
+@app.get('/api/v1/last_price/{pair}')
+def get_last_price_for_pair(pair="KMD_LTC"):
+    pair = pair.split("_")
+    last_price = stats_utils.get_last_price_for_pair(pair, MM2_DB_PATH)
+    return last_price
 
 
 if __name__ == '__main__':

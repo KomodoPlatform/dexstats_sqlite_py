@@ -1,9 +1,21 @@
 import sqlite3
 import requests
 import json
+import logging
 from decimal import Decimal
 from datetime import datetime, timedelta
 from collections import OrderedDict
+from logger import CustomFormatter
+
+# create logger with 'destats_app'
+logger = logging.getLogger("destats_app")
+logger.setLevel(logging.DEBUG)
+
+# create console handler with a higher log level
+handler = logging.StreamHandler()
+handler.setFormatter(CustomFormatter())
+logger.addHandler(handler)
+
 
 # getting list of pairs with amount of swaps > 0 from db (list of tuples)
 # string -> list (of base, rel tuples)
@@ -14,7 +26,7 @@ def get_availiable_pairs(path_to_db):
     timestamp_7d_ago = int((datetime.now() - timedelta(7)).strftime("%s"))
     sql_cursor.execute("SELECT DISTINCT maker_coin_ticker, taker_coin_ticker FROM stats_swaps WHERE started_at > ?;", (timestamp_7d_ago,))
     available_pairs = sql_cursor.fetchall()
-    print(f"{len(available_pairs)} distinct maker/taker pairs for last 7 days")
+    logger.info(f"{len(available_pairs)} distinct maker/taker pairs for last 7 days")
     sorted_available_pairs = []
     for pair in available_pairs:
        sorted_available_pairs.append(tuple(sorted(pair)))
@@ -41,11 +53,10 @@ def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
     return swap_statuses
 
 
-
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
 # last_price, base_volume, quote_volume, highest_price_24h, lowest_price_24h, price_change_percent_24h
-def count_volumes_and_prices(swap_statuses):
+def count_volumes_and_prices(swap_statuses, pair, path_to_db):
     try:
         pair_volumes_and_prices = {}
         base_volume = 0
@@ -60,7 +71,7 @@ def count_volumes_and_prices(swap_statuses):
         pair_volumes_and_prices["base_volume"] = base_volume
         pair_volumes_and_prices["quote_volume"] = quote_volume
     except Exception as e:
-        print(f"Error in [count_volumes_and_prices]: {e}")
+        logger.info(f"Error in [count_volumes_and_prices]: {e}")
     try:
         pair_volumes_and_prices["highest_price_24h"] = max(swap_prices.values())
     except ValueError:
@@ -72,7 +83,7 @@ def count_volumes_and_prices(swap_statuses):
     try:
         pair_volumes_and_prices["last_price"] = swap_prices[max(swap_prices.keys())]
     except ValueError:
-        pair_volumes_and_prices["last_price"] = 0
+        pair_volumes_and_prices["last_price"] = get_last_price_for_pair(pair, path_to_db)
     try:
         pair_volumes_and_prices["price_change_percent_24h"] = ( swap_prices[max(swap_prices.keys())] - swap_prices[min(swap_prices.keys())] ) / Decimal(100)
     except ValueError:
@@ -94,7 +105,7 @@ def get_mm2_orderbook_for_pair(pair):
         r = requests.post(mm2_host, json=params)
         return json.loads(r.text)
     except Exception as e:
-        print(f"Error in [get_mm2_orderbook_for_pair]: {e}")
+        logger.info(f"Error in [get_mm2_orderbook_for_pair]: {e}")
 
 
 # list -> string
@@ -190,7 +201,7 @@ def summary_for_pair(pair, path_to_db):
     pair_summary = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
     swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
+    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     orderbook = get_mm2_orderbook_for_pair(pair)
@@ -227,7 +238,6 @@ def summary_for_pair(pair, path_to_db):
     return pair_summary
 
 
-
 # Ticker Endpoint
 def ticker_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)
@@ -236,7 +246,7 @@ def ticker_for_pair(pair, path_to_db):
     pair_ticker = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
     swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
+    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_ticker[pair[0] + "_" + pair[1]] = OrderedDict()
     pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     pair_ticker[pair[0] + "_" + pair[1]]["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
@@ -286,8 +296,17 @@ def get_last_price_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
     sql_cursor = conn.cursor()
+    sorted_pair = tuple(sorted(pair))
+    logger.info(pair)
+    logger.info(sorted_pair)
+    if pair[0] == sorted_pair[0]:
+        coin_a = pair[0]
+        coin_b = pair[1]
+    else:
+        coin_a = pair[1]
+        coin_b = pair[0]
 
-    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[0]}' and taker_coin_ticker='{pair[1]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_a}' and taker_coin_ticker='{coin_b}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
     sql_cursor.execute(sql)
     resp = sql_cursor.fetchone()
     try:
@@ -296,7 +315,7 @@ def get_last_price_for_pair(pair, path_to_db):
     except:
         swap_price = None
 
-    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[1]}' and taker_coin_ticker='{pair[0]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_b}' and taker_coin_ticker='{coin_a}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
     sql_cursor.execute(sql)
     resp2 = sql_cursor.fetchone()
     try: 
@@ -311,6 +330,12 @@ def get_last_price_for_pair(pair, path_to_db):
     elif swap_price2: swap_price = swap_price2
     else: swap_price = 0
     return swap_price
+
+
+def get_chunks(data, chunk_length):
+    for i in range(0, len(data), chunk_length):
+        yield data[i:i + chunk_length]
+
 
 def get_data_from_gecko():
     coin_ids_dict = {}
@@ -329,24 +354,27 @@ def get_data_from_gecko():
             coin_ids.append(coin_id)
     coin_ids = list(set(coin_ids))
     coin_ids.sort()
-    coin_ids = ",".join(coin_ids)
-    r = ""
-    try:
-        url = f'https://api.coingecko.com/api/v3/simple/price?ids={coin_ids}&vs_currencies=usd'
-        print(url)
-        gecko_data = requests.get(url).json()
-    except Exception as e:
-        return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
-    try:
-        for coin in coin_ids_dict:
-            coin_id = coin_ids_dict[coin]["coingecko_id"]
-            if coin_id not in ["na", "test-coin", ""] and coin_id in gecko_data:
-                if "usd" in gecko_data[coin_id]:
-                    coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
-            else:
-                coin_ids_dict[coin]["usd_price"] = 0
-    except Exception as e:
-        print(f'Error in [get_data_from_gecko]: {e}')
+    param_limit = 200
+    coin_id_chunks = list(get_chunks(coin_ids, 200))
+    for chunk in coin_id_chunks:
+        chunk_ids = ",".join(chunk)
+        r = ""
+        try:
+            url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_ids}&vs_currencies=usd'
+            logger.info(url)
+            gecko_data = requests.get(url).json()
+        except Exception as e:
+            return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
+        try:
+            for coin in coin_ids_dict:
+                coin_id = coin_ids_dict[coin]["coingecko_id"]
+                if coin_id not in ["na", "test-coin", ""] and coin_id in gecko_data:
+                    if "usd" in gecko_data[coin_id]:
+                        coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                else:
+                    coin_ids_dict[coin]["usd_price"] = 0
+        except Exception as e:
+            logger.info(f'Error in [get_data_from_gecko]: {e}')
     return coin_ids_dict
 
 # Data for atomicdex.io website
@@ -370,7 +398,7 @@ def atomicdex_info(path_to_db):
         for pair_summary in summary_data:
             current_liqudity += pair_summary["pair_liqudity_usd"]
     except Exception as e:
-        print(f"Error in [atomicdex_info]: {e}")
+        logger.info(f"Error in [atomicdex_info]: {e}")
     conn.close()
     return {
         "swaps_all_time" : swaps_all_time,
