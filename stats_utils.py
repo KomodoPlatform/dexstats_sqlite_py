@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+import os
 import sqlite3
 import requests
 import json
@@ -5,24 +7,12 @@ import logging
 from decimal import Decimal
 from datetime import datetime, timedelta
 from collections import OrderedDict
+from dotenv import load_dotenv
 from logger import logger
+import sqlite_db
 
-
-# getting list of pairs with amount of swaps > 0 from db (list of tuples)
-# string -> list (of base, rel tuples)
-def get_availiable_pairs(path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    sql_cursor = conn.cursor()
-    # Without a time limit, this is returning too many pairs to send a response before timeout.
-    timestamp_7d_ago = int((datetime.now() - timedelta(7)).strftime("%s"))
-    sql_cursor.execute("SELECT DISTINCT maker_coin_ticker, taker_coin_ticker FROM stats_swaps WHERE started_at > ?;", (timestamp_7d_ago,))
-    available_pairs = sql_cursor.fetchall()
-    logger.info(f"{len(available_pairs)} distinct maker/taker pairs for last 7 days")
-    sorted_available_pairs = []
-    for pair in available_pairs:
-       sorted_available_pairs.append(tuple(sorted(pair)))
-    conn.close()
-    return list(set(sorted_available_pairs))
+load_dotenv()
+MM2_DB_PATH = os.getenv('MM2_DB_PATH')
 
 
 # tuple, integer -> list (with swap status dicts)
@@ -74,7 +64,10 @@ def count_volumes_and_prices(swap_statuses, pair, path_to_db):
     try:
         pair_volumes_and_prices["last_price"] = swap_prices[max(swap_prices.keys())]
     except ValueError:
-        pair_volumes_and_prices["last_price"] = get_last_price_for_pair(pair, path_to_db)
+        DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
+        pair_volumes_and_prices["last_price"] = DB.get_last_price_for_pair(pair)
+        DB.close()
+        
     try:
         pair_volumes_and_prices["price_change_percent_24h"] = ( swap_prices[max(swap_prices.keys())] - swap_prices[min(swap_prices.keys())] ) / Decimal(100)
     except ValueError:
@@ -127,38 +120,34 @@ def find_highest_bid(orderbook):
         return 0
     return highest_bid["price"]
 
+def get_related_coins(coin):
+    script_path = os.path.realpath(os.path.dirname(__file__))
+    coin = coin.split("-")[0]
+    with open(f"{script_path}/mm2/coins", "r") as f:
+        coins = json.load(f)
+    return [i["coin"] for i in coins if i["coin"]==coin or i["coin"].startswith(f"{coin}-")]
+
 def get_and_parse_orderbook(pair):
-    if "-ERC20" not in pair[0] and "-ERC20" not in pair[1] and "-BEP20" not in pair[0] and "-BEP20" not in pair[1]:
-        # TODO use combinatorica lib and tokens types list
-        pair_erc20_a = (pair[0] + "-ERC20", pair[1])
-        pair_erc20_a_orderbook = get_mm2_orderbook_for_pair(pair_erc20_a)
-        pair_erc20_b = (pair[0], pair[1] + "-ERC20")
-        pair_erc20_b_orderbook = get_mm2_orderbook_for_pair(pair_erc20_b)
-        pair_bep20_a = (pair[0] + "-BEP20", pair[1])
-        pair_bep20_a_orderbook = get_mm2_orderbook_for_pair(pair_bep20_a)
-        pair_bep20_b = (pair[0], pair[1] + "-BEP20")
-        pair_bep20_b_orderbook = get_mm2_orderbook_for_pair(pair_bep20_b)
-        pair_erc20_erc20 = (pair[0] + "-ERC20", pair[1] + "-ERC20")
-        pair_erc20_erc20_orderbook = get_mm2_orderbook_for_pair(pair_erc20_erc20)
-        pair_bep20_bep20 = (pair[0] + "-BEP20", pair[1] + "-BEP20")
-        pair_bep20_bep20_orderbook = get_mm2_orderbook_for_pair(pair_bep20_bep20)
-        pair_bep20_erc20 =  (pair[0] + "-BEP20", pair[1] + "-ERC20")
-        pair_bep20_erc20_orderbook = get_mm2_orderbook_for_pair(pair_bep20_erc20)
-        pair_erc20_bep20 = (pair[0] + "-ERC20", pair[1] + "-BEP20")
-        pair_erc20_bep20_orderbook = get_mm2_orderbook_for_pair(pair_erc20_bep20)
-        usual_orderbook = get_mm2_orderbook_for_pair(pair)
-        orderbooks_list = [usual_orderbook, pair_erc20_a_orderbook, pair_erc20_b_orderbook, pair_bep20_a_orderbook, pair_bep20_b_orderbook, pair_erc20_erc20_orderbook, pair_bep20_bep20_orderbook, pair_bep20_erc20_orderbook, pair_erc20_bep20_orderbook]
-        orderbook = {"bids" : [], "asks": []}
-        for orderbook_permutation in orderbooks_list:
-            # case when there is no such ticker in coins file
-            if next(iter(orderbook_permutation)) == "error":
-                orderbook_permutation = {"bids" : [], "asks": []}
-            orderbook["bids"] += orderbook_permutation["bids"]
-            orderbook["asks"] += orderbook_permutation["asks"]
-    else:
-        orderbook = get_mm2_orderbook_for_pair(pair)
-        if next(iter(orderbook)) == "error":
-            orderbook = {"bids" : [], "asks": []}
+    coin_a = pair[0]
+    coin_b = pair[1]
+    coins_a = get_related_coins(coin_a)
+    coins_b = get_related_coins(coin_b)
+    orderbooks_list = []
+    for coin_a in coins_a:
+        for coin_b in coins_b:
+            if coin_a != coin_b:
+                pair = (coin_a, coin_b)
+                orderbook = get_mm2_orderbook_for_pair(pair)
+                orderbooks_list.append(orderbook)
+
+    orderbook = {"bids" : [], "asks": []}
+    for orderbook_permutation in orderbooks_list:
+        # case when there is no such ticker in coins file
+        if next(iter(orderbook_permutation)) == "error":
+            orderbook_permutation = {"bids" : [], "asks": []}
+        orderbook["bids"] += orderbook_permutation["bids"]
+        orderbook["asks"] += orderbook_permutation["asks"]
+
     bids_converted_list = []
     asks_converted_list = []
 
@@ -170,6 +159,7 @@ def get_and_parse_orderbook(pair):
             bids_converted_list.append(converted_bid)
     except KeyError:
         pass
+
     try:
         for ask in orderbook["asks"]:
             converted_ask = []
@@ -186,12 +176,10 @@ def get_and_parse_orderbook(pair):
 # tuple, string -> dictionary
 # Receiving tuple with base and rel as an argument and producing CMC summary endpoint data, requires mm2 rpc password and sql db connection
 def summary_for_pair(pair, path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
+    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
     pair_summary = OrderedDict()
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
+    DB.close()
     pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
@@ -225,25 +213,22 @@ def summary_for_pair(pair, path_to_db):
         pair_summary["pair_liqudity_usd"] = base_liqudity_in_usd + rel_liqudity_in_usd
     except KeyError:
         pair_summary["pair_liqudity_usd"] = 0
-    conn.close()
+    
     return pair_summary
 
 
 # Ticker Endpoint
 def ticker_for_pair(pair, path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
     pair_ticker = OrderedDict()
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
+    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
+    DB.close()
     pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
     pair_ticker[pair[0] + "_" + pair[1]] = OrderedDict()
     pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
     pair_ticker[pair[0] + "_" + pair[1]]["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
     pair_ticker[pair[0] + "_" + pair[1]]["base_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["base_volume"])
     pair_ticker[pair[0] + "_" + pair[1]]["isFrozen"] = "0"
-    conn.close()
     return pair_ticker
 
 
@@ -261,14 +246,15 @@ def orderbook_for_pair(pair):
 
 # Trades Endpoint
 def trades_for_pair(pair, path_to_db):
+    logger.info(pair)
     pair = tuple(map(str, pair.split('_')))
     if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
         return {"error": "not valid pair"}
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
+
+    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
+    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
+    DB.close()
+
     trades_info = []
     for swap_status in swaps_for_pair_24h:
         trade_info = OrderedDict()
@@ -279,44 +265,8 @@ def trades_for_pair(pair, path_to_db):
         trade_info["timestamp"] = swap_status["started_at"]
         trade_info["type"] = swap_status["trade_type"]
         trades_info.append(trade_info)
-    conn.close()
+
     return trades_info
-
-# Last Trade Price
-def get_last_price_for_pair(pair, path_to_db):
-    conn = sqlite3.connect(path_to_db)
-    conn.row_factory = sqlite3.Row
-    sql_cursor = conn.cursor()
-    sorted_pair = tuple(sorted(pair))
-    coin_a = pair[0]
-    coin_b = pair[1]
-
-    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_a}' and taker_coin_ticker='{coin_b}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
-    sql_cursor.execute(sql)
-    resp = sql_cursor.fetchone()
-    try:
-        swap_price = Decimal(resp["taker_amount"]) / Decimal(resp["maker_amount"])
-        swap_time = resp["started_at"]
-    except:
-        swap_price = None
-
-    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_b}' and taker_coin_ticker='{coin_a}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
-    sql_cursor.execute(sql)
-    resp2 = sql_cursor.fetchone()
-    try: 
-        swap_price2 = 1/(Decimal(resp2["taker_amount"]) / Decimal(resp2["maker_amount"]))
-        swap_time2 = resp2["started_at"]
-    except: 
-        swap_price2 = None
-    if swap_price and swap_price2:
-        if swap_time > swap_time2:
-            return swap_price
-    elif swap_price: swap_price = swap_price
-    elif swap_price2: swap_price = swap_price2
-    else: swap_price = 0
-    if pair[0] != sorted_pair[0]:
-        swap_price = 1/swap_price
-    return swap_price
 
 
 def get_chunks(data, chunk_length):
@@ -342,7 +292,7 @@ def get_data_from_gecko():
     coin_ids = list(set(coin_ids))
     coin_ids.sort()
     param_limit = 200
-    coin_id_chunks = list(get_chunks(coin_ids, 200))
+    coin_id_chunks = list(get_chunks(coin_ids, param_limit))
     for chunk in coin_id_chunks:
         chunk_ids = ",".join(chunk)
         r = ""
@@ -366,30 +316,15 @@ def get_data_from_gecko():
 
 # Data for atomicdex.io website
 def atomicdex_info(path_to_db):
-    timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
-    conn = sqlite3.connect(path_to_db)
-    sql_cursor = conn.cursor()
-    sql_cursor.execute("SELECT * FROM stats_swaps WHERE is_success=1;")
-    swaps_all_time = len(sql_cursor.fetchall())
-    sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_24h_ago,))
-    swaps_24h = len(sql_cursor.fetchall())
-    sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_30d_ago,))
-    swaps_30d = len(sql_cursor.fetchall())
-    available_pairs = get_availiable_pairs(path_to_db)
-    summary_data = []
     try:
-        for pair in available_pairs:
-            summary_data.append(summary_for_pair(pair, path_to_db))
+        DB = sqlite_db.sqliteDB(path_to_db)
+        summary = DB.get_adex_summary()
+        pairs = DB.get_pairs()
+        summary_data = [summary_for_pair(pair, path_to_db) for pair in pairs]
         current_liqudity = 0
-        for pair_summary in summary_data:
-            current_liqudity += pair_summary["pair_liqudity_usd"]
+        current_liqudity += sum([pair_summary["pair_liqudity_usd"] for pair_summary in summary_data])
+        summary.update({"current_liqudity": current_liqudity})
     except Exception as e:
-        logger.info(f"Error in [atomicdex_info]: {e}")
-    conn.close()
-    return {
-        "swaps_all_time" : swaps_all_time,
-        "swaps_30d" : swaps_30d,
-        "swaps_24h" : swaps_24h,
-        "current_liqudity" : current_liqudity
-    }
+        logger.error(f"Error in [atomicdex_info]: {e}")
+        return None
+    return summary

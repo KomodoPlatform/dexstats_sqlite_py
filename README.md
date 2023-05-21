@@ -9,3 +9,6 @@ As data source using AtomicDEX-API SQLite (https://github.com/KomodoPlatform/ato
 It also requires https://github.com/KomodoPlatform/atomicDEX-API running on the same host for orderbooks retreiving (supposed to work on seednode which collecting swap statuses). For remote connection tweak `mm2_host` in `stats_utils.py`
 
 Currrent production URL: https://stats-api.atomicdex.io/docs#/
+
+To test the endpoints: `pytest test_endpoints.py`
+
