@@ -186,10 +186,10 @@ def get_and_parse_orderbook(pair):
 def summary_for_pair(pair, path_to_db):
     conn = sqlite3.connect(path_to_db)
     conn.row_factory = sqlite3.Row
-    sql_coursor = conn.cursor()
+    sql_cursor = conn.cursor()
     pair_summary = OrderedDict()
     timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_coursor, pair, timestamp_24h_ago)
+    swaps_for_pair_24h = get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp_24h_ago)
     pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h)
     pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
     pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
@@ -281,6 +281,36 @@ def trades_for_pair(pair, path_to_db):
     conn.close()
     return trades_info
 
+# Last Trade Price
+def get_last_price_for_pair(pair, path_to_db):
+    conn = sqlite3.connect(path_to_db)
+    conn.row_factory = sqlite3.Row
+    sql_cursor = conn.cursor()
+
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[0]}' and taker_coin_ticker='{pair[1]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql_cursor.execute(sql)
+    resp = sql_cursor.fetchone()
+    try:
+        swap_price = Decimal(resp["taker_amount"]) / Decimal(resp["maker_amount"])
+        swap_time = resp["started_at"]
+    except:
+        swap_price = None
+
+    sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{pair[1]}' and taker_coin_ticker='{pair[0]}' AND  is_success=1 ORDER BY started_at LIMIT 1;"
+    sql_cursor.execute(sql)
+    resp2 = sql_cursor.fetchone()
+    try: 
+        swap_price2 = 1/(Decimal(resp2["taker_amount"]) / Decimal(resp2["maker_amount"]))
+        swap_time2 = resp2["started_at"]
+    except: 
+        swap_price2 = None
+    if swap_price and swap_price2:
+        if swap_time > swap_time2:
+            return swap_price
+    elif swap_price: swap_price = swap_price
+    elif swap_price2: swap_price = swap_price2
+    else: swap_price = 0
+    return swap_price
 
 def get_data_from_gecko():
     coin_ids_dict = {}
@@ -295,7 +325,7 @@ def get_data_from_gecko():
     coin_ids = []
     for coin in coin_ids_dict:
         coin_id = coin_ids_dict[coin]["coingecko_id"]
-        if coin_id != "na" and coin_id != "test-coin":
+        if coin_id not in ["na", "test-coin", ""]:
             coin_ids.append(coin_id)
     coin_ids = list(set(coin_ids))
     coin_ids.sort()
@@ -310,7 +340,7 @@ def get_data_from_gecko():
     try:
         for coin in coin_ids_dict:
             coin_id = coin_ids_dict[coin]["coingecko_id"]
-            if coin_id != "na" and coin_id != "" and coin_id != "test-coin" and coin_id in gecko_data:
+            if coin_id not in ["na", "test-coin", ""] and coin_id in gecko_data:
                 if "usd" in gecko_data[coin_id]:
                     coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
             else:
