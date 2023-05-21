@@ -1,0 +1,1 @@
+You will need to download mm2 binary and coins file into this folder, and create an MM2.json file.
