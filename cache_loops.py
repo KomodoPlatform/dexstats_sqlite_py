@@ -17,7 +17,7 @@ class CacheLoops():
         gecko_data = stats_utils.get_data_from_gecko()
         if "error" not in gecko_data:
             with open('gecko_cache.json', 'w+') as f:
-                json.dump(gecko_data, f)
+                json.dump(gecko_data, f, indent=4)
                 logger.info("Updated gecko_cache.json")
         else:
             logger.info(f"Error in [cache_gecko_data]: {gecko_data}")
@@ -52,5 +52,5 @@ class CacheLoops():
         data = stats_utils.atomicdex_info(MM2_DB_PATH)
         if data:
             with open('adex_cache.json', 'w+') as cache_file:
-                json.dump(data, cache_file)
+                json.dump(data, cache_file, indent=4)
                 logger.info("Updated adex_cache.json")
