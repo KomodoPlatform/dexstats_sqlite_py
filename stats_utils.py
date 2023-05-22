@@ -15,25 +15,6 @@ load_dotenv()
 MM2_DB_PATH = os.getenv('MM2_DB_PATH')
 
 
-# tuple, integer -> list (with swap status dicts)
-# select from DB swap statuses for desired pair with timestamps > than provided
-def get_swaps_since_timestamp_for_pair(sql_cursor, pair, timestamp):
-    t = (timestamp,pair[0],pair[1],)
-    sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND maker_coin_ticker=? AND taker_coin_ticker=? AND is_success=1;", t)
-    swap_statuses_a_b = [dict(row) for row in sql_cursor.fetchall()]
-    for swap in swap_statuses_a_b:
-        swap["trade_type"] = "buy"
-    sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND taker_coin_ticker=? AND maker_coin_ticker=? AND is_success=1;", t)
-    swap_statuses_b_a = [dict(row) for row in sql_cursor.fetchall()]
-    for swap in swap_statuses_b_a:
-        temp_maker_amount = swap["maker_amount"]
-        swap["maker_amount"] = swap["taker_amount"]
-        swap["taker_amount"] = temp_maker_amount
-        swap["trade_type"] = "sell"
-    swap_statuses = swap_statuses_a_b + swap_statuses_b_a
-    return swap_statuses
-
-
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
 # last_price, base_volume, quote_volume, highest_price_24h, lowest_price_24h, price_change_percent_24h
