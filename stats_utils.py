@@ -157,23 +157,35 @@ def get_and_parse_orderbook(pair):
 # tuple, string -> dictionary
 # Receiving tuple with base and rel as an argument and producing CMC summary endpoint data, requires mm2 rpc password and sql db connection
 def summary_for_pair(pair, path_to_db):
-    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
-    pair_summary = OrderedDict()
-    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
-    DB.close()
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
-    pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
-    pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
-    orderbook = get_mm2_orderbook_for_pair(pair)
-    pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
-    pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
-    pair_summary["base_currency"] = pair[0]
-    pair_summary["base_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["base_volume"])
-    pair_summary["quote_currency"] = pair[1]
-    pair_summary["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
-    pair_summary["price_change_percent_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["price_change_percent_24h"])
-    pair_summary["highest_price_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["highest_price_24h"])
-    pair_summary["lowest_price_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["lowest_price_24h"])
+    try:
+        DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
+        pair_summary = OrderedDict()
+        swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
+        logger.info(f"swaps_for_pair_24h {pair[0]}_{pair[1]}")
+
+        DB.close()
+        pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
+        logger.info(f"pair_24h_volumes_and_prices {pair[0]}_{pair[1]}")
+        pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
+        pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
+        orderbook = get_mm2_orderbook_for_pair(pair)
+        logger.info(f"got orderbook for {pair[0]}_{pair[1]}")
+        pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
+        pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
+        if "KMD" in pair:
+            logger.info(f"Pair: {pair[0]}_{pair[1]}")
+            logger.info(f"Last price: {pair_summary['last_price']}")
+            logger.info(f"Lowest ask: {pair_summary['lowest_ask']}")
+            logger.info(f"Highest bid: {pair_summary['highest_bid']}")
+        pair_summary["base_currency"] = pair[0]
+        pair_summary["base_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["base_volume"])
+        pair_summary["quote_currency"] = pair[1]
+        pair_summary["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
+        pair_summary["price_change_percent_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["price_change_percent_24h"])
+        pair_summary["highest_price_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["highest_price_24h"])
+        pair_summary["lowest_price_24h"] = "{:.10f}".format(pair_24h_volumes_and_prices["lowest_price_24h"])
+    except Exception as e:
+        logger.error(f"Error while getting summary for pair {pair}: {e}")
     # liqudity in USD
     try:
         base_liqudity_in_coins = orderbook["total_asks_base_vol"]
