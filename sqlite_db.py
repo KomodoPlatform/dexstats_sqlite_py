@@ -13,6 +13,8 @@ class sqliteDB():
         self.conn = sqlite3.connect(path_to_db)
         if dict_format: self.conn.row_factory = sqlite3.Row
         self.sql_cursor = self.conn.cursor()
+        with open('gecko_cache.json', 'r') as json_file:
+            self.gecko_data = json.load(json_file)
 
     def close(self):
         self.conn.close()
@@ -23,12 +25,22 @@ class sqliteDB():
         # Without a time limit, this is returning too many pairs to send a response before timeout.
         timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
         sql = f"SELECT DISTINCT maker_coin_ticker, taker_coin_ticker FROM stats_swaps \
-                WHERE started_at > {timestamp};"
+                WHERE started_at > {timestamp} AND is_success=1;"
         self.sql_cursor.execute(sql)
         available_pairs = self.sql_cursor.fetchall()
         sorted_available_pairs = [tuple(sorted(pair)) for pair in available_pairs]
         logger.info(f"{len(available_pairs)} distinct maker/taker pairs for last {days} days")
-        return list(set(sorted_available_pairs))
+        pairs = list(set(sorted_available_pairs))
+        adjusted = []
+        for pair in pairs:
+            if pair[0] in self.gecko_data:
+                if pair[1] in self.gecko_data:
+                    if self.gecko_data[pair[1]]["usd_market_cap"] < self.gecko_data[pair[0]]["usd_market_cap"]:
+                        pair = (pair[1], pair[0])
+                else:
+                    pair = (pair[1], pair[0])
+            adjusted.append(pair)
+        return adjusted
 
 
     # tuple, integer - > list (with swap status dicts)
@@ -83,7 +95,7 @@ class sqliteDB():
         elif swap_price: swap_price = swap_price
         elif swap_price2: swap_price = swap_price2
         else: swap_price = 0
-        if pair[0] != sorted_pair[0]:
+        if pair[0] != sorted_pair[0] and swap_price != 0:
             swap_price = 1/swap_price
         return swap_price
 

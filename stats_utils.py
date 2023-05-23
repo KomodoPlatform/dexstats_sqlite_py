@@ -278,7 +278,7 @@ def get_data_from_gecko():
         chunk_ids = ",".join(chunk)
         r = ""
         try:
-            url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_ids}&vs_currencies=usd'
+            url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_ids}&vs_currencies=usd&include_market_cap=true'
             #logger.debug(url)
             gecko_data = requests.get(url).json()
         except Exception as e:
@@ -288,12 +288,19 @@ def get_data_from_gecko():
                 coin_id = coin_ids_dict[coin]["coingecko_id"]
                 if coin_id not in ["na", "test-coin", ""] and coin_id in gecko_data:
                     if "usd" in gecko_data[coin_id]:
-                        coin_ids_dict[coin]["usd_price"] = gecko_data[coin_id]["usd"]
+                        coin_ids_dict[coin].update({
+                            "usd_price": gecko_data[coin_id]["usd"],
+                            "usd_market_cap": gecko_data[coin_id]["usd_market_cap"],
+                        })
                 else:
-                    coin_ids_dict[coin]["usd_price"] = 0
+                    coin_ids_dict[coin].update({
+                        "usd_price": 0,
+                        "usd_market_cap": 0
+                    })
         except Exception as e:
             logger.info(f'Error in [get_data_from_gecko]: {e}')
     return coin_ids_dict
+
 
 # Data for atomicdex.io website
 def atomicdex_info(path_to_db):
