@@ -172,7 +172,7 @@ def summary_for_pair(pair, path_to_db):
         logger.info(f"got orderbook for {pair[0]}_{pair[1]}")
         pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
         pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
-        if "KMD" in pair:
+        if "KMDXX" in pair:
             logger.info(f"Pair: {pair[0]}_{pair[1]}")
             logger.info(f"Last price: {pair_summary['last_price']}")
             logger.info(f"Lowest ask: {pair_summary['lowest_ask']}")

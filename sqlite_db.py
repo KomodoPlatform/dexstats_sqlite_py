@@ -102,8 +102,7 @@ class sqliteDB():
         elif swap_price2:
             price = swap_price2
         price = 0
-        if price > 0:
-            return price
+        return price
 
     def get_adex_summary(self):
         timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
