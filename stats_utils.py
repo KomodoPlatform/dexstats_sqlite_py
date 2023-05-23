@@ -254,52 +254,66 @@ def get_chunks(data, chunk_length):
     for i in range(0, len(data), chunk_length):
         yield data[i:i + chunk_length]
 
+def get_coins_config():
+    with open("coins_config.json", "r") as coins_json:
+        return json.load(coins_json)
 
 def get_data_from_gecko():
-    coin_ids_dict = {}
-    with open("coins_config.json", "r") as coins_json:
-        json_data = json.load(coins_json)
-        for coin in json_data:
-            try:
-                coin_ids_dict[coin] = {}
-                coin_ids_dict[coin]["coingecko_id"] = json_data[coin]["coingecko_id"]
-            except KeyError as e:
-                 coin_ids_dict[coin]["coingecko_id"] = "na"
     coin_ids = []
-    for coin in coin_ids_dict:
-        coin_id = coin_ids_dict[coin]["coingecko_id"]
-        if coin_id not in ["na", "test-coin", ""]:
-            coin_ids.append(coin_id)
-    coin_ids = list(set(coin_ids))
+    coins_info = {}
+    gecko_coins = {}
+    coins_config = get_coins_config()
+    for coin in coins_config:
+        coins_info.update({coin: {}})
+        coins_info[coin].update({
+            "usd_market_cap": 0,
+            "usd_price": 0,
+            "coingecko_id": ""
+        })
+        # filter for coins with coingecko_id
+        if "coingecko_id" in coins_config[coin]:
+            coin_id = coins_config[coin]["coingecko_id"]
+            # ignore test coins
+            if coin_id not in ["na", "test-coin", ""]:
+                coins_info[coin].update({"coingecko_id": coin_id})
+                if coin_id not in coin_ids: coin_ids.append(coin_id)
+                if coin_id not in gecko_coins: gecko_coins[coin_id] = []
+                gecko_coins[coin_id].append(coin)
+                
     coin_ids.sort()
     param_limit = 200
+    logger.debug(f"{len(coin_ids)} coins_ids to get data from gecko")
     coin_id_chunks = list(get_chunks(coin_ids, param_limit))
+    logger.debug(f"{len(coin_id_chunks)} chunks")
     for chunk in coin_id_chunks:
         chunk_ids = ",".join(chunk)
         r = ""
         try:
             url = f'https://api.coingecko.com/api/v3/simple/price?ids={chunk_ids}&vs_currencies=usd&include_market_cap=true'
-            #logger.debug(url)
             gecko_data = requests.get(url).json()
         except Exception as e:
             return {"error": "https://api.coingecko.com/api/v3/simple/price?ids= is not available"}
         try:
-            for coin in coin_ids_dict:
-                coin_id = coin_ids_dict[coin]["coingecko_id"]
-                if coin_id not in ["na", "test-coin", ""] and coin_id in gecko_data:
-                    if "usd" in gecko_data[coin_id]:
-                        coin_ids_dict[coin].update({
-                            "usd_price": gecko_data[coin_id]["usd"],
-                            "usd_market_cap": gecko_data[coin_id]["usd_market_cap"],
-                        })
-                else:
-                    coin_ids_dict[coin].update({
-                        "usd_price": 0,
-                        "usd_market_cap": 0
-                    })
+            for coin_id in gecko_data:
+                # This gracefully skips cases where id returned from api is not the same as in the url
+                try:
+                    coins = gecko_coins[coin_id]
+                    for coin in coins:
+                        if "usd" in gecko_data[coin_id]:
+                            coins_info[coin].update({"usd_price": gecko_data[coin_id]["usd"]})
+                        else:
+                            coins_info[coin].update({"usd_price": 0})
+                        if "usd_market_cap" in gecko_data[coin_id]:
+                            coins_info[coin].update({"usd_market_cap": gecko_data[coin_id]["usd_market_cap"]})
+                        else:
+                            coins_info[coin].update({"usd_market_cap": 0})
+                except:
+                    logger.warning(f"CoinGecko ID in response does not match ID in request [{coin_id}]")
+                    pass
+
         except Exception as e:
             logger.info(f'Error in [get_data_from_gecko]: {e}')
-    return coin_ids_dict
+    return coins_info
 
 
 # Data for atomicdex.io website
