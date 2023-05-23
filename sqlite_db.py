@@ -29,7 +29,7 @@ class sqliteDB():
         self.sql_cursor.execute(sql)
         available_pairs = self.sql_cursor.fetchall()
         sorted_available_pairs = [tuple(sorted(pair)) for pair in available_pairs]
-        logger.info(f"{len(available_pairs)} distinct maker/taker pairs for last {days} days")
+        logger.debug(f"{len(available_pairs)} distinct maker/taker pairs for last {days} days")
         pairs = list(set(sorted_available_pairs))
         adjusted = []
         for pair in pairs:

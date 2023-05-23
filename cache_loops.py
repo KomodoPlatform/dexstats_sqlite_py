@@ -18,10 +18,9 @@ class CacheLoops():
         if "error" not in gecko_data:
             with open('gecko_cache.json', 'w+') as f:
                 json.dump(gecko_data, f, indent=4)
-                logger.info("Updated gecko_cache.json")
+                logger.debug("Updated gecko_cache.json")
         else:
-            logger.info(f"Error in [cache_gecko_data]: {gecko_data}")
-
+            logger.warning(f"Error in [cache_gecko_data]: {gecko_data}")
 
 
     def refresh_summary_cache(self):
@@ -33,7 +32,7 @@ class CacheLoops():
             summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
         with open('summary_cache.json', 'w+') as f:
             json.dump(summary_data, f, indent=4)
-            logger.info("Updated summary_cache.json")
+            logger.debug("Updated summary_cache.json")
 
 
     def refresh_ticker_cache(self):
@@ -45,7 +44,7 @@ class CacheLoops():
             ticker_data.append(stats_utils.ticker_for_pair(pair, MM2_DB_PATH))
         with open('ticker_cache.json', 'w+') as f:
             json.dump(ticker_data, f, indent=4)
-            logger.info("Updated ticker_cache.json")
+            logger.debug("Updated ticker_cache.json")
 
 
     def refresh_adex_cache(self):
@@ -53,4 +52,4 @@ class CacheLoops():
         if data:
             with open('adex_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
-                logger.info("Updated adex_cache.json")
+                logger.debug("Updated adex_cache.json")
