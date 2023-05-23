@@ -101,8 +101,6 @@ class sqliteDB():
             price = swap_price2
         else:
             price = 0
-        if "KMD" in pair:
-            logger.debug(f"{pair} swap_price: {swap_price}, swap_price2: {swap_price2}, price: {price}")
         return price
 
     def get_adex_summary(self):
