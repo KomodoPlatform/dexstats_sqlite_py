@@ -89,8 +89,6 @@ class sqliteDB():
             swap_time2 = resp2["started_at"]
         except: 
             swap_price2 = None
-        if "KMD" in pair:
-            logger.debug(f"swap_price: {swap_price}, swap_price2: {swap_price2}")
         
         if swap_price and swap_price2:
             if swap_time > swap_time2:
@@ -101,7 +99,10 @@ class sqliteDB():
             price = swap_price
         elif swap_price2:
             price = swap_price2
-        price = 0
+        else:
+            price = 0
+        if "KMD" in pair:
+            logger.debug(f"{pair} swap_price: {swap_price}, swap_price2: {swap_price2}, price: {price}")
         return price
 
     def get_adex_summary(self):

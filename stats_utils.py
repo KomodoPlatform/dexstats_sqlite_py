@@ -161,15 +161,15 @@ def summary_for_pair(pair, path_to_db):
         DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
         pair_summary = OrderedDict()
         swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
-        logger.info(f"swaps_for_pair_24h {pair[0]}_{pair[1]}")
+        #logger.info(f"swaps_for_pair_24h {pair[0]}_{pair[1]}")
 
         DB.close()
         pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
-        logger.info(f"pair_24h_volumes_and_prices {pair[0]}_{pair[1]}")
+        #logger.info(f"pair_24h_volumes_and_prices {pair[0]}_{pair[1]}")
         pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
         pair_summary["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
         orderbook = get_mm2_orderbook_for_pair(pair)
-        logger.info(f"got orderbook for {pair[0]}_{pair[1]}")
+        #logger.info(f"got orderbook for {pair[0]}_{pair[1]}")
         pair_summary["lowest_ask"] = "{:.10f}".format(Decimal(find_lowest_ask(orderbook)))
         pair_summary["highest_bid"] = "{:.10f}".format(Decimal(find_highest_bid(orderbook)))
         if "KMDXX" in pair:
