@@ -25,7 +25,7 @@ class sqliteDB():
         # Without a time limit, this is returning too many pairs to send a response before timeout.
         timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
         sql = f"SELECT DISTINCT maker_coin_ticker, taker_coin_ticker FROM stats_swaps \
-                WHERE started_at > {timestamp};"
+                WHERE started_at > {timestamp} AND is_success=1;"
         self.sql_cursor.execute(sql)
         available_pairs = self.sql_cursor.fetchall()
         sorted_available_pairs = [tuple(sorted(pair)) for pair in available_pairs]
