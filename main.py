@@ -103,7 +103,7 @@ def orderbook(market_pair="KMD_LTC"):
     '''Live Orderbook for this pair'''
     if len(market_pair) > 32:
         raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
-    orderbook_data = stats_utils.orderbook_for_pair(market_pair)
+    orderbook_data = stats_utils.orderbook_for_pair(market_pair, endpoint=True)
     return orderbook_data
 
 

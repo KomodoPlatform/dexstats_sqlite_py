@@ -115,7 +115,7 @@ def get_related_coins(coin):
     return [i["coin"] for i in coins if i["coin"] == coin or i["coin"].startswith(f"{coin}-")]
 
 
-def get_and_parse_orderbook(pair):
+def get_and_parse_orderbook(pair, endpoint=False):
     try:
         coin_a = pair[0]
         coin_b = pair[1]
@@ -149,10 +149,16 @@ def get_and_parse_orderbook(pair):
 
     try:
         for bid in orderbook["bids"]:
-            converted_bid = {
-                "price": bid["price"],
-                "base_max_volume": bid["base_max_volume"]
-            }
+            if endpoint:
+                converted_bid = []
+                converted_bid.append(bid["price"])
+                converted_bid.append(bid["base_max_volume"])
+                bids_converted_list.append(converted_bid)
+            else:
+                converted_bid = {
+                    "price": bid["price"],
+                    "base_max_volume": bid["base_max_volume"]
+                }
             bids_converted_list.append(converted_bid)
     except KeyError as e:
         logger.warning(f"Error in [get_and_parse_orderbook]: {e}")
@@ -160,10 +166,16 @@ def get_and_parse_orderbook(pair):
 
     try:
         for ask in orderbook["asks"]:
-            converted_ask = {
-                "price": ask["price"],
-                "base_max_volume": ask["base_max_volume"]
-            }
+            if endpoint:
+                converted_ask = []
+                converted_ask.append(ask["price"])
+                converted_ask.append(ask["base_max_volume"])
+                asks_converted_list.append(converted_ask)
+            else:
+                converted_ask = {
+                    "price": ask["price"],
+                    "base_max_volume": ask["base_max_volume"]
+                }
             asks_converted_list.append(converted_ask)
     except KeyError:
         logger.warning(f"Error in [get_and_parse_orderbook]: {e}")
@@ -246,7 +258,7 @@ def ticker_for_pair(pair, path_to_db):
 
 
 # Orderbook Endpoint
-def orderbook_for_pair(pair):
+def orderbook_for_pair(pair, endpoint=False):
     if "_" in pair:
         pair = tuple(map(str, pair.split('_')))
     if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
@@ -254,7 +266,7 @@ def orderbook_for_pair(pair):
     orderbook_data = OrderedDict()
     orderbook_data["timestamp"] = "{}".format(int(datetime.now().strftime("%s")))
     # TODO: maybe it'll be asked on API side? quite tricky to convert strings and sort the
-    data = get_and_parse_orderbook(pair)
+    data = get_and_parse_orderbook(pair, endpoint)
     orderbook_data["bids"] = data["bids"]
     orderbook_data["asks"] = data["asks"]
     orderbook_data["asks"] = data["asks"]
