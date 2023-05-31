@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import platform
 import requests
@@ -36,3 +37,7 @@ def test_swaps24():
     response = client.get("/api/v1/last_price/KMD_LTC")
     assert response.status_code == 200
 
+
+def test_atomicdex_fortnight():
+    response = client.get("/api/v1/atomicdex_fortnight")
+    assert response.status_code == 200
