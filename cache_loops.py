@@ -34,6 +34,7 @@ class CacheLoops():
         with open('summary_cache.json', 'w+') as f:
             json.dump(summary_data, f, indent=4)
             logger.info("Updated summary_cache.json")
+        DB.close()
 
 
     def refresh_ticker_cache(self):
@@ -42,23 +43,28 @@ class CacheLoops():
         pairs = DB.get_pairs()
         ticker_data = []
         for pair in pairs:
-            ticker_data.append(stats_utils.ticker_for_pair(pair, MM2_DB_PATH))
+            ticker_data.append(stats_utils.ticker_for_pair(pair, DB))
         with open('ticker_cache.json', 'w+') as f:
             json.dump(ticker_data, f, indent=4)
             logger.info("Updated ticker_cache.json")
+        DB.close()
 
 
     def refresh_adex_cache(self):
-        data = stats_utils.atomicdex_info()
+        DB = sqlite_db.sqliteDB(MM2_DB_PATH)
+        data = stats_utils.atomicdex_info(DB)
         if data:
             with open('adex_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
                 logger.info("Updated adex_cache.json")
+        DB.close()
 
 
     def refresh_adex_fortnight_cache(self):
-        data = stats_utils.atomicdex_timespan_info(14)
+        DB = sqlite_db.sqliteDB(MM2_DB_PATH)
+        data = stats_utils.atomicdex_timespan_info(DB)
         if data:
             with open('adex_fortnight_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
                 logger.info("Updated adex_fortnight_cache.json")
+        DB.close()
