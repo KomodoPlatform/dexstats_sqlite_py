@@ -1,169 +1,125 @@
 #!/usr/bin/env python3
-import os
-import time
-import requests
 import sqlite3
-import pytest
+import requests
+import json
+import logging
 from decimal import Decimal
-from dotenv import load_dotenv
+from datetime import datetime, timedelta
+from collections import OrderedDict
 from logger import logger
-import sqlite_db
+import stats_utils
+from test_db import setup_pairs_test_data, setup_database
 
-load_dotenv()
-MM2_DB_PATH = os.getenv('MM2_DB_PATH')
+def test_get_suffix():
+    assert stats_utils.get_suffix(1) == "24h"
+    assert stats_utils.get_suffix(8) == "8d"
 
-now = int(time.time())
-hour_ago = now - 3600
-day_ago = now - 86400
-week_ago = now - 604800
-month_ago = now - 2592000
-two_months_ago = now - 5184000
+def test_get_related_coins():
+    coins = stats_utils.get_related_coins("LTC")
+    assert "LTC" in coins
+    assert "LTC-segwit" in coins
 
-@pytest.fixture
-def setup_database():
-    """ Fixture to set up the in-memory database with test data """
-    DB = sqlite_db.sqliteDB(':memory:')
-    DB.sql_cursor.execute('''
-        CREATE TABLE stats_swaps (
-            id INTEGER NOT NULL PRIMARY KEY,
-            maker_coin VARCHAR(255) NOT NULL,
-            taker_coin VARCHAR(255) NOT NULL,
-            uuid VARCHAR(255) NOT NULL UNIQUE,
-            started_at INTEGER NOT NULL,
-            finished_at INTEGER NOT NULL,
-            maker_amount DECIMAL NOT NULL,
-            taker_amount DECIMAL NOT NULL,
-            is_success INTEGER NOT NULL,
-            maker_coin_ticker VARCHAR(255) NOT NULL DEFAULT '',
-            maker_coin_platform VARCHAR(255) NOT NULL DEFAULT '',
-            taker_coin_ticker VARCHAR(255) NOT NULL DEFAULT '',
-            taker_coin_platform VARCHAR(255) NOT NULL DEFAULT '',
-            maker_coin_usd_price DECIMAL,
-            taker_coin_usd_price DECIMAL
-        );
-    ''')
-    yield DB
+    coins = stats_utils.get_related_coins("KMD")
+    assert "KMD" in coins
+    assert "KMD-BEP20" in coins
 
+def test_count_volumes_and_prices():
+    # TODO: Needs a fixture
+    pass
 
-@pytest.fixture
-def setup_test_data1(setup_database):
-    DB = setup_database
-    sample_data = [
-        (1, 'MORTY', 'RICK', '63429451-9a10-4dcb-8709-1d9b92765165', 1607864083, 1607864237, 1, 1, 1, 'MORTY', '', 'RICK', '', None, None),
-        (2, 'MORTY', 'RICK', 'd284662a-3544-4c91-b49f-4a90c3a5c7e1', 1607761156, 1607761509, 0.05, 0.02, 1, 'MORTY', '', 'RICK', '', None, None),
-        (3, 'MORTY', 'RICK', 'bdd4fc75-f46f-43ac-9b04-795b94b4bcab', 1607765044, 1607765303, 0.09874471, 0.09874471, 1, 'MORTY', '', 'RICK', '', None, None),
-        (4, 'MORTY', 'RICK', '49a3d9f9-7978-4181-aa99-fd2d9f5635af', 1607805878, 1607806214, 0.02, 0.02, 1, 'MORTY', '', 'RICK', '', None, None),
-        (5, 'RICK', 'MORTY', '4c79b65e-692a-4658-b908-038a518f59fc', 1607771030, 1607771229, 0.01, 0.01, 1, 'RICK', '', 'MORTY', '', None, None),
-    ]
-    DB.sql_cursor.executemany('INSERT INTO stats_swaps VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
-    yield DB
+def test_find_lowest_ask():
+    # TODO: Needs a fixture
+    pass
 
+def test_find_highest_bid():
+    # TODO: Needs a fixture
+    pass
 
-@pytest.fixture
-def setup_pairs_test_data(setup_database):
-    DB = setup_database
-    # TODO: Spoof timestamps to test range queries
-    sample_data = [
-        (11, 'DGB-segwit', 'KMD-BEP20', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago, hour_ago + 20, 1, 8, 1, 'DGB', 'segwit', 'KMD', 'BEP20', None, None),
-        (22, 'MCL', 'KMD', '4d1dc872-7262-46b7-840d-5e9b1aad243f', hour_ago, hour_ago + 20, 99, 88, 0, 'KMD', '', 'USDC', '', None, None),
-        (27, 'BTC', 'MATIC', '8724d1dc-2762-4633-8add-6ad2e9b1a4e7', hour_ago, hour_ago + 20, 2, 7, 1, 'BTC', '', 'MATIC', '', None, None),
-        (47, 'KMD', 'BTC', '24d1dc87-7622-6334-add8-9b1a4e76ad2e', hour_ago - 10, hour_ago + 10, 10, 4, 1, 'KMD', '', 'BTC', '', None, None),
-        (36, 'KMD-BEP20', 'BTC', '03d3afc2-273f-40a5-bcd4-31efdb6bcc8b', day_ago, day_ago + 20, 4, 10, 1, 'KMD', 'BEP20', 'BTC', '', None, None),
-        (44, 'BTC', 'LTC', 'acf3e087-ac6f-4649-b420-5eb8e2924bf2', week_ago, week_ago + 20, 5, 4, 1, 'BTC', '', 'LTC', '', None, None),
-        (52, 'DGB', 'LTC-segwit', 'f3e0ac87-40a5-4649-b420-5eb8e2924bf2', week_ago, week_ago + 20, 6, 3, 1, 'DGB', '', 'LTC', 'segwit', None, None),
-        (55, 'DGB-segwit', 'LTC', 'cf3e0387-ac6f-a2fb-b360-4bf25fed4292', month_ago, month_ago + 20, 3, 6, 1, 'DGB', 'segwit', 'LTC', '', None, None),
-        (66, 'BTC-BEP20', 'DOGE', '50d8e2e4-ee4b-494f-a2fb-48467614b613', two_months_ago, two_months_ago + 20, 8, 1, 1, 'BTC', 'BEP20', 'DOGE', '', None, None),
-    ]
-    DB.sql_cursor.executemany('INSERT INTO stats_swaps VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
-    yield DB
-  
+def test_find_highest_bid():
+    # TODO: Needs a fixture
+    pass
 
-def test_get_pairs(setup_pairs_test_data):
-    # Confirm pairs response is correct
-    DB = setup_pairs_test_data
-    pairs = DB.get_pairs()
-    assert ("MCL", "KMD") not in pairs
-    assert ("DGB", "LTC") not in pairs
-    assert ("KMD", "BTC") in pairs
-    assert ("BTC", "KMD") not in pairs
-    pairs = DB.get_pairs(45)
-    assert ("MCL", "KMD") not in pairs
-    assert ("DGB", "LTC") in pairs
-    assert ("DOGE", "BTC") not in pairs
-    pairs = DB.get_pairs(90)
-    assert ("DOGE", "BTC") in pairs
+def test_get_and_parse_orderbook():
+    # TODO: Needs a fixture
+    pass
 
-def test_get_swaps_for_pair(setup_pairs_test_data):
+def test_summary_for_pair():
+    # TODO: Needs a fixture
+    pass
+
+def test_ticker_for_pair():
+    # TODO: Needs a fixture
+    pass  
+
+def test_orderbook_for_pair():
+    # TODO: Needs a fixture
+    pass  
+
+def test_trades_for_pair(setup_pairs_test_data):
     DB = setup_pairs_test_data
     DB.conn.row_factory = sqlite3.Row
     DB.sql_cursor = DB.conn.cursor()
 
-    swaps = DB.get_swaps_for_pair(("MCL", "KMD"), day_ago)
-    assert len(swaps) == 0
+    pair = "DGB_KMD"
+    r = stats_utils.trades_for_pair(pair, DB)
+    assert len(r) == 1
+    assert r[0]["type"] == "buy"
+    assert r[0]["price"] == "{:.10f}".format(8)
 
-    swaps = DB.get_swaps_for_pair(("MATIC", "BTC"), day_ago)
-    assert len(swaps) == 1
-    assert swaps[0]["trade_type"] == "sell"
+    pair = "KMD_DGB"
+    r = stats_utils.trades_for_pair(pair, DB)
+    assert len(r) == 1
+    assert r[0]["type"] == "sell"
+    assert r[0]["price"] == "{:.10f}".format(0.125)
 
-    swaps = DB.get_swaps_for_pair(("DGB", "LTC"), two_months_ago)
-    assert len(swaps) == 2
-    assert swaps[0]["trade_type"] == "buy"
+    pair = "notAticker"
+    r = stats_utils.trades_for_pair("notAticker", DB)
+    assert r == {"error": "not valid pair"}
 
-def test_last_price_for_pair(setup_pairs_test_data):
-    DB = setup_pairs_test_data
-    DB.conn.row_factory = sqlite3.Row
-    DB.sql_cursor = DB.conn.cursor()
+    pair = "X_Y"
+    swaps_for_pair = DB.get_swaps_for_pair(pair)
+    r = stats_utils.trades_for_pair("X_Y", DB)
+    assert r == []
+    # TODO: Add extra tests once linked to fixtures for test db
 
-    last_price = DB.get_last_price_for_pair(("DGB", "LTC"))
-    assert last_price == 2
+def test_get_chunks():
+    data = [1,2,3,4,5,6,7,8,9,10]
+    chunks = list(stats_utils.get_chunks(data, 3))
+    assert len(chunks) == 4
+    assert len(chunks[0]) == 3
+    assert len(chunks[3]) == 1
 
-    last_price = DB.get_last_price_for_pair(("LTC", "DGB"))
-    assert last_price == 0.5
+def test_get_coins_config():
+    # TODO: Needs a fixture
+    pass
 
-    last_price = DB.get_last_price_for_pair(("KMD", "BTC"))
-    assert last_price == 2.5
+def test_get_data_from_gecko():
+    # Not TODO: This queries external api, so not sure how to test yet.
+    # Might break it down a it into smaller functions
+    pass  
 
-    last_price = DB.get_last_price_for_pair(("BTC", "KMD"))
-    assert last_price == Decimal('0.4')
-
-    last_price = DB.get_last_price_for_pair(("x", "y"))
-    assert last_price == 0
-
-def test_timespan_swaps(setup_pairs_test_data):
-    DB = setup_pairs_test_data
-    DB.sql_cursor = DB.conn.cursor()
-
-    swaps = DB.get_timespan_swaps()
-    assert len(swaps) == 3
-
-    swaps = DB.get_timespan_swaps(7)
-    logger.info(swaps)
-    assert len(swaps) == 4
-
-    swaps = DB.get_timespan_swaps(30)
-    assert len(swaps) == 6
-
-    swaps = DB.get_timespan_swaps(60)
-    assert len(swaps) == 7
-
-    swaps = DB.get_timespan_swaps(9999)
-    assert len(swaps) == 8
-
-def test_get_adex_summary(setup_pairs_test_data):
+def test_atomicdex_info(setup_pairs_test_data):
     DB = setup_pairs_test_data
     DB.sql_cursor = DB.conn.cursor()
-    resp = DB.get_adex_summary()
-    assert resp == {
-            "swaps_all_time": 8,
-            "swaps_24h": 3,
-            "swaps_30d": 6
+    r = stats_utils.atomicdex_info(DB)
+    assert r["swaps_all_time"] == 8
+    assert r["swaps_24h"] == 3
+    assert r["swaps_30d"] == 6
+    # TODO: This value references the orderbook. Will need to add fixture for it 
+    # assert r["current_liquidity"] == 504180.75
 
-    }
+def test_get_liquidity():
+    # TODO: Needs a fixture
+    pass
 
+def test_get_value():
+    # TODO: Needs a fixture
+    pass
 
-if __name__ == '__main__':
-    DB = sqlite_db.sqliteDB(MM2_DB_PATH)
-    DB.sql_cursor.execute('select * from stats_swaps where maker_coin = "BTC" limit 5')
-    for r in DB.sql_cursor.fetchall():
-        print(r)
-    DB.close()
+def test_atomicdex_timespan_info():
+    # TODO: Needs a fixture
+    pass
+
+def test_get_top_pairs():
+    # TODO: Needs a fixture
+    pass
