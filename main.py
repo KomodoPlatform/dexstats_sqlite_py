@@ -125,7 +125,9 @@ def trades(market_pair="KMD_LTC"):
     '''Swaps for this pair in the last 24 hours'''
     if len(market_pair) > 32:
         raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
-    trades_data = stats_utils.trades_for_pair(market_pair, MM2_DB_PATH)
+    DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
+    trades_data = stats_utils.trades_for_pair(market_pair, DB)
+    DB.close()
     return trades_data
 
 
