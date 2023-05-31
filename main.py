@@ -37,7 +37,6 @@ def cache_gecko_data():
         logger.warning(f"Error in [cache_gecko_data]: {e}")
 
 
-
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_summary_data():
@@ -60,12 +59,18 @@ def cache_ticker_data():
 @repeat_every(seconds=600)  # caching data every 10 minutes
 def cache_atomicdex_io():
     try:
-        data = stats_utils.atomicdex_info(MM2_DB_PATH)
-        with open('adex_cache.json', 'w+') as cache_file:
-            json.dump(data, cache_file)
-            logger.info("Updated adex_cache.json")
+        loops.refresh_adex_cache()
     except Exception as e:
         logger.warning(f"Error in [cache_atomicdex_io]: {e}")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=600)  # caching data every 10 minutes
+def cache_atomicdex_io_fortnight():
+    try:
+        loops.refresh_adex_fortnight_cache()
+    except Exception as e:
+        logger.warning(f"Error in [cache_atomicdex_io_fortnight]: {e}")
 
 
 @app.get('/api/v1/summary')
@@ -96,6 +101,14 @@ def atomicdex_info_api():
     with open('adex_cache.json', 'r') as json_file:
         adex_cached_data = json.load(json_file)
         return adex_cached_data
+
+
+@app.get('/api/v1/atomicdex_fortnight')
+def atomicdex_fortnight_api():
+    '''Simple Summary Statistics over last 2 weeks'''
+    with open('adex_fortnight_cache.json', 'r') as json_file:
+        adex_fortnight_cache = json.load(json_file)
+        return adex_fortnight_cache
 
 
 @app.get('/api/v1/orderbook/{market_pair}')
