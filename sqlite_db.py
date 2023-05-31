@@ -54,7 +54,8 @@ class sqliteDB():
         for swap in swap_statuses_a_b:
             swap["trade_type"] = "buy"
         self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND taker_coin_ticker=? AND maker_coin_ticker=? AND is_success=1;", t)
-        swap_statuses_b_a = [dict(row) for row in self.sql_cursor.fetchall()]
+        data = self.sql_cursor.fetchall()
+        swap_statuses_b_a = [dict(row) for row in data]
         for swap in swap_statuses_b_a:
             temp_maker_amount = swap["maker_amount"]
             swap["maker_amount"] = swap["taker_amount"]
@@ -107,9 +108,14 @@ class sqliteDB():
         timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
         timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
         self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE is_success=1;")
-        swaps_all_time = len(self.sql_cursor.fetchall())
-        self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_24h_ago,))
-        swaps_24h = len(self.sql_cursor.fetchall())
-        self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp_30d_ago,))
-        swaps_30d = len(self.sql_cursor.fetchall())
-        return {"swaps_all_time": swaps_all_time, "swaps_24h": swaps_24h, "swaps_30d": swaps_30d}
+        return {
+            "swaps_all_time": len(self.sql_cursor.fetchall()),
+            "swaps_24h": len(self.get_timespan_swaps(1)),
+            "swaps_30d": len(self.get_timespan_swaps(30))
+        }
+
+    def get_timespan_swaps(self, days=1):
+        timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
+        self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE started_at > ? AND is_success=1;", (timestamp,))
+        timespan_swaps = self.sql_cursor.fetchall()
+        return timespan_swaps
