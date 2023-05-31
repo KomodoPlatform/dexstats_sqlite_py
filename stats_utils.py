@@ -138,7 +138,7 @@ def get_orderbooks_list(pair):
     return orderbooks_list
 
 
-def get_and_parse_orderbook(pair, endpoint=False, orderbooks_list=False):
+def get_and_parse_orderbook(pair, endpoint=False, orderbooks_list=None):
     try:
         if not orderbooks_list:
             orderbooks_list = get_orderbooks_list(pair)
@@ -427,15 +427,14 @@ def get_data_from_gecko():
 
 
 # Data for atomicdex.io website
-def atomicdex_info(days: int=1, DB: sqlite_db.sqliteDB=None):
+def atomicdex_info(DB: sqlite_db.sqliteDB=None, days: int=1):
     try:
         if not DB:
             DB = sqlite_db.sqliteDB(MM2_DB_PATH)
         summary = DB.get_adex_summary()
         pairs = DB.get_pairs()
         summary_data = [summary_for_pair(pair, days, DB) for pair in pairs]
-        current_liquidity = 0
-        current_liquidity += sum([pair_summary["pair_liquidity_usd"] for pair_summary in summary_data])
+        current_liquidity = get_liquidity(summary_data)
         summary.update({"current_liquidity": round(current_liquidity, 2)})
     except Exception as e:
         logger.error(f"Error in [atomicdex_info]: {e}")
