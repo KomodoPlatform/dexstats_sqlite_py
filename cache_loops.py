@@ -25,11 +25,12 @@ class CacheLoops():
 
     def refresh_summary_cache(self):
         # Takes around 1:20 minute to run with 300 pairs
+        days = 1
         DB = sqlite_db.sqliteDB(MM2_DB_PATH)
         pairs = DB.get_pairs()
         summary_data = []
         for pair in pairs:
-            summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH, days=1))
+            summary_data.append(stats_utils.summary_for_pair(pair, days, DB))
         with open('summary_cache.json', 'w+') as f:
             json.dump(summary_data, f, indent=4)
             logger.info("Updated summary_cache.json")
@@ -48,7 +49,7 @@ class CacheLoops():
 
 
     def refresh_adex_cache(self):
-        data = stats_utils.atomicdex_info(MM2_DB_PATH)
+        data = stats_utils.atomicdex_info()
         if data:
             with open('adex_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
@@ -56,7 +57,7 @@ class CacheLoops():
 
 
     def refresh_adex_fortnight_cache(self):
-        data = stats_utils.atomicdex_timespan_info(MM2_DB_PATH, 14)
+        data = stats_utils.atomicdex_timespan_info(14)
         if data:
             with open('adex_fortnight_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
