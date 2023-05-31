@@ -29,7 +29,7 @@ class CacheLoops():
         pairs = DB.get_pairs()
         summary_data = []
         for pair in pairs:
-            summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH))
+            summary_data.append(stats_utils.summary_for_pair(pair, MM2_DB_PATH, days=1))
         with open('summary_cache.json', 'w+') as f:
             json.dump(summary_data, f, indent=4)
             logger.info("Updated summary_cache.json")
@@ -53,3 +53,11 @@ class CacheLoops():
             with open('adex_cache.json', 'w+') as cache_file:
                 json.dump(data, cache_file, indent=4)
                 logger.info("Updated adex_cache.json")
+
+
+    def refresh_adex_fortnight_cache(self):
+        data = stats_utils.atomicdex_timespan_info(MM2_DB_PATH, 14)
+        if data:
+            with open('adex_fortnight_cache.json', 'w+') as cache_file:
+                json.dump(data, cache_file, indent=4)
+                logger.info("Updated adex_fortnight_cache.json")
