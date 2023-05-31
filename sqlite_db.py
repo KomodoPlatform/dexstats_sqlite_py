@@ -10,12 +10,12 @@ from logger import logger
 
 
 class sqliteDB:
-    def __init__(self, path_to_db, dict_format=False):
+    def __init__(self, path_to_db, dict_format=False, cache_path="gecko_cache.json"):
         self.conn = sqlite3.connect(path_to_db)
         if dict_format:
             self.conn.row_factory = sqlite3.Row
         self.sql_cursor = self.conn.cursor()
-        with open("gecko_cache.json", "r") as json_file:
+        with open(cache_path, "r") as json_file:
             self.gecko_data = json.load(json_file)
 
     def close(self):
@@ -67,6 +67,8 @@ class sqliteDB:
                 AND maker_coin_ticker=? \
                 AND taker_coin_ticker=? \
                 AND is_success=1;"
+        self.conn.row_factory = sqlite3.Row
+        self.sql_cursor = self.conn.cursor()
         self.sql_cursor.execute(
             sql,
             t,
