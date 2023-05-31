@@ -25,8 +25,10 @@ def get_suffix(days: int) -> str:
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
 # last_price, base_volume, quote_volume, highest_price_24h, lowest_price_24h, price_change_percent_24h
-def count_volumes_and_prices(swap_statuses, pair, path_to_db, days=1):
+def count_volumes_and_prices(swap_statuses, pair, days=1, DB: sqlite_db.sqliteDB = None):
     try:
+        if not DB:
+            DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
         suffix = get_suffix(days)
         pair_volumes_and_prices = {}
         base_volume = 0
@@ -56,10 +58,7 @@ def count_volumes_and_prices(swap_statuses, pair, path_to_db, days=1):
         pair_volumes_and_prices["last_price"] = swap_prices[max(
             swap_prices.keys())]
     except ValueError:
-        DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
-        pair_volumes_and_prices["last_price"] = DB.get_last_price_for_pair(
-            pair)
-        DB.close()
+        pair_volumes_and_prices["last_price"] = DB.get_last_price_for_pair(pair)
 
     try:
         pair_volumes_and_prices[f"price_change_percent_{suffix}"] = (swap_prices[max(
@@ -123,26 +122,42 @@ def get_related_coins(coin):
     return [i["coin"] for i in coins if i["coin"] == coin or i["coin"].startswith(f"{coin}-")]
 
 
-def get_and_parse_orderbook(pair, endpoint=False):
+def get_orderbooks_list(pair):
+    # TODO: Move to dex_utils
+    coin_a = pair[0]
+    coin_b = pair[1]
+    coins_a = get_related_coins(coin_a)
+    coins_b = get_related_coins(coin_b)
+    orderbooks_list = []
+    for coin_a in coins_a:
+        for coin_b in coins_b:
+            if coin_a != coin_b:
+                alt_pair = (coin_a, coin_b)
+                orderbook = get_mm2_orderbook_for_pair(alt_pair)
+                orderbooks_list.append(orderbook)
+    return orderbooks_list
+
+
+def get_and_parse_orderbook(pair, endpoint=False, orderbooks_list=False):
     try:
-        coin_a = pair[0]
-        coin_b = pair[1]
-        coins_a = get_related_coins(coin_a)
-        coins_b = get_related_coins(coin_b)
-        orderbooks_list = []
-        for coin_a in coins_a:
-            for coin_b in coins_b:
-                if coin_a != coin_b:
-                    alt_pair = (coin_a, coin_b)
-                    orderbook = get_mm2_orderbook_for_pair(alt_pair)
-                    orderbooks_list.append(orderbook)
-        orderbook = {"pair": f"{pair[0]}_{pair[1]}", "bids": [], "asks": [
-        ], "total_asks_base_vol": 0, "total_bids_rel_vol": 0}
+        if not orderbooks_list:
+            orderbooks_list = get_orderbooks_list(pair)
+        orderbook = {
+            "pair": f"{pair[0]}_{pair[1]}",
+            "bids": [],
+            "asks": [],
+            "total_asks_base_vol": 0,
+            "total_bids_rel_vol": 0
+        }
         for i in orderbooks_list:
             # case when there is no such ticker in coins file
             if next(iter(i)) == "error":
-                i = {"bids": [], "asks": [],
-                     "total_asks_base_vol": 0, "total_bids_rel_vol": 0}
+                i = {
+                        "bids": [],
+                        "asks": [],
+                        "total_asks_base_vol": 0,
+                        "total_bids_rel_vol": 0
+                    }
             orderbook["bids"] += i["bids"]
             orderbook["asks"] += i["asks"]
             orderbook["total_asks_base_vol"] += Decimal(i["total_asks_base_vol"])
@@ -196,16 +211,17 @@ def get_and_parse_orderbook(pair, endpoint=False):
 # SUMMARY Endpoint
 # tuple, string -> dictionary
 # Receiving tuple with base and rel as an argument and producing CMC summary endpoint data, requires mm2 rpc password and sql db connection
-def summary_for_pair(pair, path_to_db, days=1):
+def summary_for_pair(pair, days, DB: sqlite_db.sqliteDB):
     try:
         suffix = get_suffix(days)
-        DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
+        if not DB:
+            DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
         pair_summary = OrderedDict()
-        swaps_for_pair = DB.get_swaps_for_pair(pair, days)
+        timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
+        swaps_for_pair = DB.get_swaps_for_pair(pair, timestamp)
         gecko_cached_data = DB.gecko_data
-        DB.close()
         pair_summary["pair_swaps_count"] = len(swaps_for_pair)
-        pair_volumes_and_prices = count_volumes_and_prices(swaps_for_pair, pair, path_to_db, days)
+        pair_volumes_and_prices = count_volumes_and_prices(swaps_for_pair, pair, days, DB=DB)
         pair_summary["trading_pair"] = pair[0] + "_" + pair[1]
         pair_summary["last_price"] = "{:.10f}".format(pair_volumes_and_prices["last_price"])
         orderbook = orderbook_for_pair(pair)
@@ -220,32 +236,32 @@ def summary_for_pair(pair, path_to_db, days=1):
         pair_summary[f"lowest_price_{suffix}"] = "{:.10f}".format(pair_volumes_and_prices[f"lowest_price_{suffix}"])
     except Exception as e:
         logger.error(f"Error while getting summary for pair {pair}: {e}")
-    # liqudity in USD
+    # liquidity in USD
     try:
-        base_liqudity_in_coins = orderbook["total_asks_base_vol"]
-        rel_liqudity_in_coins = orderbook["total_bids_rel_vol"]
+        base_liquidity_in_coins = orderbook["total_asks_base_vol"]
+        rel_liquidity_in_coins = orderbook["total_bids_rel_vol"]
         try:
-            base_liqudity_in_usd = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
-                * float(base_liqudity_in_coins)
+            base_liquidity_in_usd = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
+                * float(base_liquidity_in_coins)
         except KeyError:
-            base_liqudity_in_usd = 0
+            base_liquidity_in_usd = 0
         try:
-            rel_liqudity_in_usd = float(gecko_cached_data[pair_summary["quote_currency"]]["usd_price"]) \
-                * float(rel_liqudity_in_coins)
+            rel_liquidity_in_usd = float(gecko_cached_data[pair_summary["quote_currency"]]["usd_price"]) \
+                * float(rel_liquidity_in_coins)
         except KeyError:
-            rel_liqudity_in_usd = 0
+            rel_liquidity_in_usd = 0
 
-        pair_summary["base_liqudity_coins"] = base_liqudity_in_coins
-        pair_summary["rel_liqudity_coins"] = rel_liqudity_in_coins
-        pair_summary["base_liqudity_usd"] = base_liqudity_in_usd
-        pair_summary["rel_liqudity_usd"] = rel_liqudity_in_usd
-        pair_summary["pair_liqudity_usd"] = base_liqudity_in_usd + rel_liqudity_in_usd
+        pair_summary["base_liquidity_coins"] = base_liquidity_in_coins
+        pair_summary["rel_liquidity_coins"] = rel_liquidity_in_coins
+        pair_summary["base_liquidity_usd"] = base_liquidity_in_usd
+        pair_summary["rel_liquidity_usd"] = rel_liquidity_in_usd
+        pair_summary["pair_liquidity_usd"] = base_liquidity_in_usd + rel_liquidity_in_usd
     except KeyError:
-        pair_summary["base_liqudity_coins"] = 0
-        pair_summary["rel_liqudity_coins"] = 0
-        pair_summary["base_liqudity_usd"] = 0
-        pair_summary["rel_liqudity_usd"] = 0
-        pair_summary["pair_liqudity_usd"] = 0
+        pair_summary["base_liquidity_coins"] = 0
+        pair_summary["rel_liquidity_coins"] = 0
+        pair_summary["base_liquidity_usd"] = 0
+        pair_summary["rel_liquidity_usd"] = 0
+        pair_summary["pair_liquidity_usd"] = 0
     
     # Value traded in USD
     try:
@@ -277,16 +293,16 @@ def summary_for_pair(pair, path_to_db, days=1):
     return pair_summary
 
 
-def ticker_for_pair(pair, path_to_db):
+def ticker_for_pair(pair, DB: sqlite_db.sqliteDB=None, days=1) -> dict:
     pair_ticker = OrderedDict()
-    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
-    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
-    DB.close()
-    pair_24h_volumes_and_prices = count_volumes_and_prices(swaps_for_pair_24h, pair, path_to_db)
+    if not DB:
+        DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
+    swaps_for_pair = DB.get_swaps_for_pair(pair)
+    pair_volumes_and_prices = count_volumes_and_prices(swaps_for_pair, pair, days=days, DB=DB)
     pair_ticker[pair[0] + "_" + pair[1]] = OrderedDict()
-    pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_24h_volumes_and_prices["last_price"])
-    pair_ticker[pair[0] + "_" + pair[1]]["quote_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["quote_volume"])
-    pair_ticker[pair[0] + "_" + pair[1]]["base_volume"] = "{:.10f}".format(pair_24h_volumes_and_prices["base_volume"])
+    pair_ticker[pair[0] + "_" + pair[1]]["last_price"] = "{:.10f}".format(pair_volumes_and_prices["last_price"])
+    pair_ticker[pair[0] + "_" + pair[1]]["quote_volume"] = "{:.10f}".format(pair_volumes_and_prices["quote_volume"])
+    pair_ticker[pair[0] + "_" + pair[1]]["base_volume"] = "{:.10f}".format(pair_volumes_and_prices["base_volume"])
     pair_ticker[pair[0] + "_" + pair[1]]["isFrozen"] = "0"
     return pair_ticker
 
@@ -311,18 +327,14 @@ def orderbook_for_pair(pair, endpoint=False):
 
 # Trades Endpoint
 
-def trades_for_pair(pair, path_to_db):
-    logger.info(pair)
+def trades_for_pair(pair: str, DB: sqlite_db.sqliteDB):
     pair = tuple(map(str, pair.split('_')))
     if len(pair) != 2 or not isinstance(pair[0], str) or not isinstance(pair[0], str):
         return {"error": "not valid pair"}
-
-    DB = sqlite_db.sqliteDB(path_to_db, dict_format=True)
-    swaps_for_pair_24h = DB.get_swaps_for_pair(pair)
-    DB.close()
+    swaps_for_pair = DB.get_swaps_for_pair(pair)
 
     trades_info = []
-    for swap_status in swaps_for_pair_24h:
+    for swap_status in swaps_for_pair:
         trade_info = OrderedDict()
         trade_info["trade_id"] = swap_status["uuid"]
         trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
@@ -415,26 +427,28 @@ def get_data_from_gecko():
 
 
 # Data for atomicdex.io website
-def atomicdex_info(path_to_db):
+def atomicdex_info(days: int=1, DB: sqlite_db.sqliteDB=None):
     try:
-        DB = sqlite_db.sqliteDB(path_to_db)
+        if not DB:
+            DB = sqlite_db.sqliteDB(MM2_DB_PATH)
         summary = DB.get_adex_summary()
         pairs = DB.get_pairs()
-        summary_data = [summary_for_pair(pair, path_to_db, days=1) for pair in pairs]
-        current_liqudity = 0
-        current_liqudity += sum([pair_summary["pair_liqudity_usd"] for pair_summary in summary_data])
-        summary.update({"current_liqudity": current_liqudity})
+        summary_data = [summary_for_pair(pair, days, DB) for pair in pairs]
+        current_liquidity = 0
+        current_liquidity += sum([pair_summary["pair_liquidity_usd"] for pair_summary in summary_data])
+        summary.update({"current_liquidity": round(current_liquidity, 2)})
     except Exception as e:
         logger.error(f"Error in [atomicdex_info]: {e}")
         return None
+    logger.debug(f"atomicdex_info: {summary}")
     return summary
 
 
 def get_liquidity(summary_data: dict) -> float:
     '''Returns the total liquidity of all pairs in the summary data'''
-    liqudity = 0
-    liqudity += sum([pair_summary["pair_liqudity_usd"] for pair_summary in summary_data])
-    return liqudity
+    liquidity = 0
+    liquidity += sum([pair_summary["pair_liquidity_usd"] for pair_summary in summary_data])
+    return liquidity
 
 
 def get_value(summary_data: dict) -> float:
@@ -444,22 +458,22 @@ def get_value(summary_data: dict) -> float:
     return value
 
 
-def atomicdex_timespan_info(path_to_db: str, days: int=14) -> dict:
+def atomicdex_timespan_info(DB: sqlite_db.sqliteDB=None, days: int=14) -> dict:
     '''Summary data for a timespan (e.g. 14 days for marketing tweets etc.)'''
     try:
-        DB = sqlite_db.sqliteDB(path_to_db)
-        days = 14
+        if not DB: DB = sqlite_db.sqliteDB(MM2_DB_PATH)
+        if not days: days = 14
         summary = {}
         pairs = DB.get_pairs(days)
         swaps = DB.get_timespan_swaps(days)
         # Total Value traded
-        summary_data = [summary_for_pair(pair, path_to_db, days) for pair in pairs]
+        summary_data = [summary_for_pair(pair, days, DB) for pair in pairs]
         summary.update({
             "days": days,
             "swaps_count": len(swaps),
             "swaps_value": get_value(summary_data),
-            "current_liqudity": get_liquidity(summary_data),
-            "top_pairs": get_top_pairs(path_to_db, pairs, swaps, days)
+            "current_liquidity": get_liquidity(summary_data),
+            "top_pairs": get_top_pairs(pairs, swaps, days)
         })
 
     except Exception as e:
@@ -468,28 +482,30 @@ def atomicdex_timespan_info(path_to_db: str, days: int=14) -> dict:
     return summary
 
 
-def get_top_pairs(path_to_db, pairs, swaps, days=14):
+def get_top_pairs(pairs, swaps, days=14, DB: sqlite_db.sqliteDB=None):
     try:
-        pairs_data = [summary_for_pair(pair, path_to_db, days) for pair in pairs]
+        if not DB:
+            DB = sqlite_db.sqliteDB(MM2_DB_PATH)
+        pairs_data = [summary_for_pair(pair, days, DB) for pair in pairs]
         print(pairs_data)
         pairs_data.sort(key=lambda x: x["pair_value_usd"], reverse=True)
         value_data = pairs_data[:3]
         top_pairs_by_value = [{i['trading_pair']:i['pair_value_usd']} for i in value_data]
-        pairs_data.sort(key=lambda x: x["pair_liqudity_usd"], reverse=True)
-        liqudity_data = pairs_data[:3]
-        top_pairs_by_liquidity = [{i['trading_pair']:i['pair_liqudity_usd']} for i in liqudity_data]
+        pairs_data.sort(key=lambda x: x["pair_liquidity_usd"], reverse=True)
+        liquidity_data = pairs_data[:3]
+        top_pairs_by_liquidity = [{i['trading_pair']:i['pair_liquidity_usd']} for i in liquidity_data]
         pairs_data.sort(key=lambda x: x["pair_swaps_count"], reverse=True)
         swaps_data = pairs_data[:3]
         top_pairs_by_swaps = [{i['trading_pair']:i['pair_swaps_count']} for i in swaps_data]
         return {
-            "by_value_usd": top_pairs_by_value,
-            "by_liqudity_usd": top_pairs_by_liquidity,
+            "by_value_traded_usd": top_pairs_by_value,
+            "by_current_liquidity_usd": top_pairs_by_liquidity,
             "by_swaps_count": top_pairs_by_swaps
         }
     except Exception as e:
         logger.error(f"Error in [get_top_pairs]: {e}")
         return {
             "by_volume": [],
-            "by_liqudity": [],
+            "by_liquidity": [],
             "by_swaps": []
         }
