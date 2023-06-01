@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 import logging
+
 
 class CustomFormatter(logging.Formatter):
 
@@ -26,7 +28,7 @@ class CustomFormatter(logging.Formatter):
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
     format = "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s (%(filename)s:%(lineno)d)"
-    datefmt='%d-%b-%y %H:%M:%S'
+    datefmt = '%d-%b-%y %H:%M:%S'
 
     FORMATS = {
         logging.DEBUG: lightblue + format + reset,
@@ -40,6 +42,7 @@ class CustomFormatter(logging.Formatter):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
+
 
 # create logger with 'destats_app'
 logger = logging.getLogger("dexstats_app")
