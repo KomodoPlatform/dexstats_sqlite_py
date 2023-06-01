@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import sqlite3
-import requests
 import json
-import logging
 from decimal import Decimal
 from datetime import datetime, timedelta
-from collections import OrderedDict
 from logger import logger
+import models
+import const
 
 
 class sqliteDB:
@@ -23,8 +22,8 @@ class sqliteDB:
 
     def get_pairs(self, days: int = 7) -> list:
         """
-        Returns a list of pairs (as a list of tuples) with at least one successful
-        swap in the last 'x' days.
+        Returns a list of pairs (as a list of tuples) with at least one
+        successful swap in the last 'x' days.
         """
         timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
         sql = f"SELECT DISTINCT maker_coin_ticker, taker_coin_ticker FROM stats_swaps \
@@ -50,13 +49,13 @@ class sqliteDB:
             adjusted.append(pair)
         return adjusted
 
-    def get_swaps_for_pair(self, pair: tuple, timestamp: int = None) -> list:
+    def get_swaps_for_pair(self, pair: tuple, timestamp: int = -1) -> list:
         """
         Returns a list of swaps for a given pair since a timestamp.
         If no timestamp is given, returns all swaps for the pair.
-        Response includes both buy and sell swaps (e.g. KMD/BTC and BTC/KMD)
+        Includes both buy and sell swaps (e.g. KMD/BTC & BTC/KMD)
         """
-        if not timestamp:
+        if timestamp == -1:
             timestamp = int((datetime.now() - timedelta(days=1)).strftime("%s"))
         t = (
             timestamp,
@@ -96,18 +95,15 @@ class sqliteDB:
         swaps_for_pair = swaps_for_pair_a_b + swaps_for_pair_b_a
         return swaps_for_pair
 
-    # Last Trade Price
     def get_last_price_for_pair(self, pair: str) -> float:
         """
         Takes a pair in the format `KMD_BTC` and returns the
         last trade price for that pair. Response scans both
         buy and sell swaps (e.g. KMD/BTC and BTC/KMD)
         """
-        if isinstance(pair, str):
-            pair = tuple(pair.split("_"))
-        sorted_pair = tuple(sorted(pair))
-        coin_a = pair[0]
-        coin_b = pair[1]
+        pair = models.Pair(pair)
+        coin_a = pair.base
+        coin_b = pair.quote
 
         sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_a}' \
                 AND taker_coin_ticker='{coin_b}' AND is_success=1 \
@@ -117,7 +113,8 @@ class sqliteDB:
         try:
             swap_price = Decimal(resp["taker_amount"]) / Decimal(resp["maker_amount"])
             swap_time = resp["started_at"]
-        except:
+        except Exception as e:
+            logger.warning(f"Error getting swap_price for {pair}: {e}")
             swap_price = None
             swap_time = None
 
@@ -131,7 +128,8 @@ class sqliteDB:
                 resp2["taker_amount"]
             )
             swap_time2 = resp2["started_at"]
-        except:
+        except Exception as e:
+            logger.warning(f"Error getting swap_price2 for {pair}: {e}")
             swap_price2 = None
             swap_time2 = None
         if swap_price and swap_price2:
@@ -152,8 +150,6 @@ class sqliteDB:
         Returns a dict of swap counts for the last 24 hours,
         last 30 days and all time
         """
-        timestamp_24h_ago = int((datetime.now() - timedelta(1)).strftime("%s"))
-        timestamp_30d_ago = int((datetime.now() - timedelta(30)).strftime("%s"))
         self.sql_cursor.execute("SELECT * FROM stats_swaps WHERE is_success=1;")
         return {
             "swaps_all_time": len(self.sql_cursor.fetchall()),
@@ -172,3 +168,6 @@ class sqliteDB:
         )
         timespan_swaps = self.sql_cursor.fetchall()
         return timespan_swaps
+
+
+ENV_DB = sqliteDB(const.MM2_DB_PATH)

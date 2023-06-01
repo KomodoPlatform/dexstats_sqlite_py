@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import uvicorn
 import json
-import os
-import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +9,11 @@ import stats_utils
 from logger import logger
 from cache_loops import CacheLoops
 import sqlite_db
+import const
 
 loops = CacheLoops()
 
 load_dotenv()
-API_HOST = os.getenv('API_HOST')
-API_PORT = int(os.getenv('API_PORT'))
-MM2_DB_PATH = os.getenv('MM2_DB_PATH')
 app = FastAPI()
 
 app.add_middleware(
@@ -28,13 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.on_event("startup")
 @repeat_every(seconds=60)  # caching data every minute
 def cache_gecko_data():
-    try:
-        loops.refresh_gecko_cache()
-    except Exception as e:
-        logger.warning(f"Error in [cache_gecko_data]: {e}")
+    result = loops.refresh_gecko_cache()
+    logger.info(result)
 
 
 @app.on_event("startup")
@@ -56,7 +51,7 @@ def cache_ticker_data():
 
 
 @app.on_event("startup")
-@repeat_every(seconds=600)  # caching data every 10 minutes
+@repeat_every(seconds=120)  # caching data every 10 minutes
 def cache_atomicdex_io():
     try:
         loops.refresh_adex_cache()
@@ -75,23 +70,31 @@ def cache_atomicdex_io_fortnight():
 
 @app.get('/api/v1/summary')
 def summary():
-    '''Trade summary for the last 24 hours for all pairs traded in the last 7 days.'''
+    '''
+    Trade summary for the last 24 hours for all
+    pairs traded in the last 7 days.
+    '''
     try:
         with open('summary_cache.json', 'r') as json_file:
             summary_cached_data = json.load(json_file)
             return summary_cached_data
-    except:
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/summary]: {e}")
         return {}
 
 
 @app.get('/api/v1/ticker')
 def ticker():
-    '''Orderbook summary for the last 24 hours for all pairs traded in the last 7 days.'''
+    '''
+    Orderbook summary for the last 24 hours
+    for all pairs traded in the last 7 days.
+    '''
     try:
         with open('ticker_cache.json', 'r') as json_file:
             ticker_cached_data = json.load(json_file)
             return ticker_cached_data
-    except:
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/ticker]: {e}")
         return {}
 
 
@@ -125,7 +128,7 @@ def trades(market_pair="KMD_LTC"):
     '''Swaps for this pair in the last 24 hours'''
     if len(market_pair) > 32:
         raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
-    DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
+    DB = sqlite_db.sqliteDB(const.MM2_DB_PATH, dict_format=True)
     trades_data = stats_utils.trades_for_pair(market_pair, DB)
     DB.close()
     return trades_data
@@ -134,11 +137,11 @@ def trades(market_pair="KMD_LTC"):
 @app.get('/api/v1/last_price/{pair}')
 def last_price_for_pair(pair="KMD_LTC"):
     '''Last trade price for a given pair.'''
-    DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
+    DB = sqlite_db.sqliteDB(const.MM2_DB_PATH, dict_format=True)
     last_price = DB.get_last_price_for_pair(pair)
     DB.close()
     return last_price
 
 
 if __name__ == '__main__':
-    uvicorn.run("main:app", host=API_HOST, port=API_PORT)
+    uvicorn.run("main:app", host=const.API_HOST, port=const.API_PORT)

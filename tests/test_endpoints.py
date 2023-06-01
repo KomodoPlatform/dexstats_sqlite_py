@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-import os
-import platform
-import requests
 from fastapi.testclient import TestClient
-from requests.auth import HTTPBasicAuth
 from main import app
 
 client = TestClient(app)
+
 
 def test_summary():
     response = client.get("/api/v1/summary")
