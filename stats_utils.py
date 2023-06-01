@@ -25,7 +25,7 @@ def get_suffix(days: int) -> str:
 # list (with swaps statuses) -> dict
 # iterating over the list of swaps and counting data for CMC summary call
 # last_price, base_volume, quote_volume, highest_price_24h, lowest_price_24h, price_change_percent_24h
-def count_volumes_and_prices(swap_statuses, pair, days=1, DB: sqlite_db.sqliteDB = None):
+def count_volumes_and_prices(swaps_for_pair, pair, days=1, DB: sqlite_db.sqliteDB = None):
     try:
         if not DB:
             DB = sqlite_db.sqliteDB(MM2_DB_PATH, dict_format=True)
@@ -34,12 +34,12 @@ def count_volumes_and_prices(swap_statuses, pair, days=1, DB: sqlite_db.sqliteDB
         base_volume = 0
         quote_volume = 0
         swap_prices = {}
-        for swap_status in swap_statuses:
-            base_volume += swap_status["maker_amount"]
-            quote_volume += swap_status["taker_amount"]
+        for swap in swaps_for_pair:
+            base_volume += swap["maker_amount"]
+            quote_volume += swap["taker_amount"]
             swap_price = Decimal(
-                swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"])
-            swap_prices[swap_status["started_at"]] = swap_price
+                swap["taker_amount"]) / Decimal(swap["maker_amount"])
+            swap_prices[swap["started_at"]] = swap_price
 
         pair_volumes_and_prices["base_volume"] = base_volume
         pair_volumes_and_prices["quote_volume"] = quote_volume
@@ -55,14 +55,14 @@ def count_volumes_and_prices(swap_statuses, pair, days=1, DB: sqlite_db.sqliteDB
     except ValueError:
         pair_volumes_and_prices[f"lowest_price_{suffix}"] = 0
     try:
-        pair_volumes_and_prices["last_price"] = swap_prices[max(
-            swap_prices.keys())]
+        pair_volumes_and_prices["last_price"] = swap_prices[max(swap_prices.keys())]
     except ValueError:
         pair_volumes_and_prices["last_price"] = DB.get_last_price_for_pair(pair)
 
     try:
-        pair_volumes_and_prices[f"price_change_percent_{suffix}"] = (swap_prices[max(
-            swap_prices.keys())] - swap_prices[min(swap_prices.keys())]) / Decimal(100)
+        pair_volumes_and_prices[f"price_change_percent_{suffix}"] = (
+            swap_prices[max(swap_prices.keys())] - swap_prices[min(swap_prices.keys())]
+            ) / Decimal(100)
     except ValueError:
         pair_volumes_and_prices[f"price_change_percent_{suffix}"] = 0
 
@@ -334,14 +334,14 @@ def trades_for_pair(pair: str, DB: sqlite_db.sqliteDB):
     swaps_for_pair = DB.get_swaps_for_pair(pair)
 
     trades_info = []
-    for swap_status in swaps_for_pair:
+    for swap in swaps_for_pair:
         trade_info = OrderedDict()
-        trade_info["trade_id"] = swap_status["uuid"]
-        trade_info["price"] = "{:.10f}".format(Decimal(swap_status["taker_amount"]) / Decimal(swap_status["maker_amount"]))
-        trade_info["base_volume"] = swap_status["maker_amount"]
-        trade_info["quote_volume"] = swap_status["taker_amount"]
-        trade_info["timestamp"] = swap_status["started_at"]
-        trade_info["type"] = swap_status["trade_type"]
+        trade_info["trade_id"] = swap["uuid"]
+        trade_info["price"] = "{:.10f}".format(Decimal(swap["taker_amount"]) / Decimal(swap["maker_amount"]))
+        trade_info["base_volume"] = swap["maker_amount"]
+        trade_info["quote_volume"] = swap["taker_amount"]
+        trade_info["timestamp"] = swap["started_at"]
+        trade_info["type"] = swap["trade_type"]
         trades_info.append(trade_info)
 
     return trades_info
