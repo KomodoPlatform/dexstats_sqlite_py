@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from collections import OrderedDict
 from logger import logger
 import stats_utils
-from test_db import setup_pairs_test_data, setup_database
+from test_db import setup_swaps_test_data, setup_database
 
 def test_get_suffix():
     assert stats_utils.get_suffix(1) == "24h"
@@ -55,8 +55,8 @@ def test_orderbook_for_pair():
     # TODO: Needs a fixture
     pass  
 
-def test_trades_for_pair(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_trades_for_pair(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.conn.row_factory = sqlite3.Row
     DB.sql_cursor = DB.conn.cursor()
 
@@ -98,8 +98,8 @@ def test_get_data_from_gecko():
     # Might break it down a it into smaller functions
     pass  
 
-def test_atomicdex_info(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_atomicdex_info(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.sql_cursor = DB.conn.cursor()
     r = stats_utils.atomicdex_info(DB)
     assert r["swaps_all_time"] == 8

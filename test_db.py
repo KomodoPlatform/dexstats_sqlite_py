@@ -46,21 +46,7 @@ def setup_database():
 
 
 @pytest.fixture
-def setup_test_data1(setup_database):
-    DB = setup_database
-    sample_data = [
-        (1, 'MORTY', 'RICK', '63429451-9a10-4dcb-8709-1d9b92765165', 1607864083, 1607864237, 1, 1, 1, 'MORTY', '', 'RICK', '', None, None),
-        (2, 'MORTY', 'RICK', 'd284662a-3544-4c91-b49f-4a90c3a5c7e1', 1607761156, 1607761509, 0.05, 0.02, 1, 'MORTY', '', 'RICK', '', None, None),
-        (3, 'MORTY', 'RICK', 'bdd4fc75-f46f-43ac-9b04-795b94b4bcab', 1607765044, 1607765303, 0.09874471, 0.09874471, 1, 'MORTY', '', 'RICK', '', None, None),
-        (4, 'MORTY', 'RICK', '49a3d9f9-7978-4181-aa99-fd2d9f5635af', 1607805878, 1607806214, 0.02, 0.02, 1, 'MORTY', '', 'RICK', '', None, None),
-        (5, 'RICK', 'MORTY', '4c79b65e-692a-4658-b908-038a518f59fc', 1607771030, 1607771229, 0.01, 0.01, 1, 'RICK', '', 'MORTY', '', None, None),
-    ]
-    DB.sql_cursor.executemany('INSERT INTO stats_swaps VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
-    yield DB
-
-
-@pytest.fixture
-def setup_pairs_test_data(setup_database):
+def setup_swaps_test_data(setup_database):
     DB = setup_database
     # TODO: Spoof timestamps to test range queries
     sample_data = [
@@ -78,9 +64,9 @@ def setup_pairs_test_data(setup_database):
     yield DB
   
 
-def test_get_pairs(setup_pairs_test_data):
+def test_get_pairs(setup_swaps_test_data):
     # Confirm pairs response is correct
-    DB = setup_pairs_test_data
+    DB = setup_swaps_test_data
     pairs = DB.get_pairs()
     assert ("MCL", "KMD") not in pairs
     assert ("DGB", "LTC") not in pairs
@@ -93,8 +79,8 @@ def test_get_pairs(setup_pairs_test_data):
     pairs = DB.get_pairs(90)
     assert ("DOGE", "BTC") in pairs
 
-def test_get_swaps_for_pair(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_get_swaps_for_pair(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.conn.row_factory = sqlite3.Row
     DB.sql_cursor = DB.conn.cursor()
 
@@ -109,8 +95,8 @@ def test_get_swaps_for_pair(setup_pairs_test_data):
     assert len(swaps) == 2
     assert swaps[0]["trade_type"] == "buy"
 
-def test_last_price_for_pair(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_last_price_for_pair(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.conn.row_factory = sqlite3.Row
     DB.sql_cursor = DB.conn.cursor()
 
@@ -129,8 +115,8 @@ def test_last_price_for_pair(setup_pairs_test_data):
     last_price = DB.get_last_price_for_pair(("x", "y"))
     assert last_price == 0
 
-def test_timespan_swaps(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_timespan_swaps(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.sql_cursor = DB.conn.cursor()
 
     swaps = DB.get_timespan_swaps()
@@ -149,8 +135,8 @@ def test_timespan_swaps(setup_pairs_test_data):
     swaps = DB.get_timespan_swaps(9999)
     assert len(swaps) == 8
 
-def test_get_adex_summary(setup_pairs_test_data):
-    DB = setup_pairs_test_data
+def test_get_adex_summary(setup_swaps_test_data):
+    DB = setup_swaps_test_data
     DB.sql_cursor = DB.conn.cursor()
     resp = DB.get_adex_summary()
     assert resp == {
