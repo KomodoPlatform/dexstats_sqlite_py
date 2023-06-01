@@ -73,9 +73,10 @@ class sqliteDB:
             sql,
             t,
         )
-        swap_statuses_a_b = [dict(row) for row in self.sql_cursor.fetchall()]
+        data = self.sql_cursor.fetchall()
+        swaps_for_pair_a_b = [dict(row) for row in data]
 
-        for swap in swap_statuses_a_b:
+        for swap in swaps_for_pair_a_b:
             swap["trade_type"] = "buy"
         sql = "SELECT * FROM stats_swaps WHERE started_at > ? \
                 AND taker_coin_ticker=? \
@@ -86,14 +87,14 @@ class sqliteDB:
             t,
         )
         data = self.sql_cursor.fetchall()
-        swap_statuses_b_a = [dict(row) for row in data]
-        for swap in swap_statuses_b_a:
+        swaps_for_pair_b_a = [dict(row) for row in data]
+        for swap in swaps_for_pair_b_a:
             temp_maker_amount = swap["maker_amount"]
             swap["maker_amount"] = swap["taker_amount"]
             swap["taker_amount"] = temp_maker_amount
             swap["trade_type"] = "sell"
-        swap_statuses = swap_statuses_a_b + swap_statuses_b_a
-        return swap_statuses
+        swaps_for_pair = swaps_for_pair_a_b + swaps_for_pair_b_a
+        return swaps_for_pair
 
     # Last Trade Price
     def get_last_price_for_pair(self, pair: str) -> float:
@@ -110,7 +111,7 @@ class sqliteDB:
 
         sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_a}' \
                 AND taker_coin_ticker='{coin_b}' AND is_success=1 \
-                ORDER BY started_at LIMIT 1;"
+                ORDER BY started_at DESC LIMIT 1;"
         self.sql_cursor.execute(sql)
         resp = self.sql_cursor.fetchone()
         try:
@@ -118,10 +119,11 @@ class sqliteDB:
             swap_time = resp["started_at"]
         except:
             swap_price = None
+            swap_time = None
 
         sql = f"SELECT * FROM stats_swaps WHERE maker_coin_ticker='{coin_b}' \
                 AND taker_coin_ticker='{coin_a}' AND is_success=1 \
-                ORDER BY started_at LIMIT 1;"
+                ORDER BY started_at DESC LIMIT 1;"
         self.sql_cursor.execute(sql)
         resp2 = self.sql_cursor.fetchone()
         try:
@@ -131,7 +133,7 @@ class sqliteDB:
             swap_time2 = resp2["started_at"]
         except:
             swap_price2 = None
-
+            swap_time2 = None
         if swap_price and swap_price2:
             if swap_time > swap_time2:
                 price = swap_price
