@@ -207,6 +207,14 @@ def get_and_parse_orderbook(pair, endpoint=False, orderbooks_list=None):
     orderbook["asks"] = asks_converted_list
     return orderbook
 
+def get_gecko_usd_price(coin: str, gecko_cached_data: dict=None) -> float:
+    if not gecko_cached_data:
+        gecko_cached_data = sqlite_db.sqliteDB(MM2_DB_PATH).gecko_data
+    try:
+        return gecko_cached_data[coin]["usd_price"]
+    except KeyError:
+        return 0
+
 
 # SUMMARY Endpoint
 # tuple, string -> dictionary
@@ -241,13 +249,19 @@ def summary_for_pair(pair, days, DB: sqlite_db.sqliteDB):
         base_liquidity_in_coins = orderbook["total_asks_base_vol"]
         rel_liquidity_in_coins = orderbook["total_bids_rel_vol"]
         try:
-            base_liquidity_in_usd = float(gecko_cached_data[pair_summary["base_currency"]]["usd_price"]) \
-                * float(base_liquidity_in_coins)
+            price = get_gecko_usd_price(
+                pair_summary["base_currency"],
+                gecko_cached_data
+            )
+            base_liquidity_in_usd = float(price) * float(base_liquidity_in_coins)
         except KeyError:
             base_liquidity_in_usd = 0
         try:
-            rel_liquidity_in_usd = float(gecko_cached_data[pair_summary["quote_currency"]]["usd_price"]) \
-                * float(rel_liquidity_in_coins)
+            price = get_gecko_usd_price(
+                pair_summary["quote_currency"],
+                gecko_cached_data
+            )
+            rel_liquidity_in_usd = float(price) * float(rel_liquidity_in_coins)
         except KeyError:
             rel_liquidity_in_usd = 0
 

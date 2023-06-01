@@ -23,7 +23,21 @@ def test_get_related_coins():
     assert "KMD" in coins
     assert "KMD-BEP20" in coins
 
-def test_count_volumes_and_prices():
+    coins = stats_utils.get_related_coins("USDC-BEP20")
+    assert "USDC" not in coins
+    assert "USDC-BEP20" in coins
+    assert "USDC-PLG20" in coins
+
+def test_get_gecko_usd_price(setup_swaps_test_data):
+    DB = setup_swaps_test_data
+    assert stats_utils.get_gecko_usd_price("KMD", DB.gecko_data) == 1
+    assert stats_utils.get_gecko_usd_price("BTC", DB.gecko_data) == 1000000
+    assert stats_utils.get_gecko_usd_price("LTC-segwit", DB.gecko_data) == stats_utils.get_gecko_usd_price("LTC", DB.gecko_data)
+
+def test_count_volumes_and_prices(setup_swaps_test_data):
+    DB = setup_swaps_test_data
+    pair = ("DGB", "LTC")
+    swaps_for_pair = DB.get_swaps_for_pair(pair)
     # TODO: Needs a fixture
     pass
 
@@ -64,13 +78,13 @@ def test_trades_for_pair(setup_swaps_test_data):
     r = stats_utils.trades_for_pair(pair, DB)
     assert len(r) == 1
     assert r[0]["type"] == "buy"
-    assert r[0]["price"] == "{:.10f}".format(8)
+    assert r[0]["price"] == "{:.10f}".format(0.001)
 
     pair = "KMD_DGB"
     r = stats_utils.trades_for_pair(pair, DB)
     assert len(r) == 1
     assert r[0]["type"] == "sell"
-    assert r[0]["price"] == "{:.10f}".format(0.125)
+    assert r[0]["price"] == "{:.10f}".format(1000)
 
     pair = "notAticker"
     r = stats_utils.trades_for_pair("notAticker", DB)

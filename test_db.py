@@ -50,14 +50,14 @@ def setup_swaps_test_data(setup_database):
     DB = setup_database
     # TODO: Spoof timestamps to test range queries
     sample_data = [
-        (11, 'DGB-segwit', 'KMD-BEP20', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago, hour_ago + 20, 1, 1, 1, 'DGB', 'segwit', 'KMD', 'BEP20', None, None),
+        (11, 'DGB-segwit', 'KMD-BEP20', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago, hour_ago + 20, 1000, 1, 1, 'DGB', 'segwit', 'KMD', 'BEP20', None, None),
         (22, 'MCL', 'KMD', '4d1dc872-7262-46b7-840d-5e9b1aad243f', hour_ago, hour_ago + 20, 1, 1, 0, 'KMD', '', 'USDC', '', None, None),
         (27, 'BTC', 'MATIC', '8724d1dc-2762-4633-8add-6ad2e9b1a4e7', hour_ago, hour_ago + 20, 1, 1, 1, 'BTC', '', 'MATIC', '', None, None),
-        (47, 'KMD', 'BTC', '24d1dc87-7622-6334-add8-9b1a4e76ad2e', hour_ago - 10, hour_ago + 10, 1, 1, 1, 'KMD', '', 'BTC', '', None, None),
-        (36, 'KMD-BEP20', 'BTC', '03d3afc2-273f-40a5-bcd4-31efdb6bcc8b', day_ago, day_ago + 20, 1, 1, 1, 'KMD', 'BEP20', 'BTC', '', None, None),
+        (47, 'KMD', 'BTC', '24d1dc87-7622-6334-add8-9b1a4e76ad2e', hour_ago - 10, hour_ago + 10, 1000000, 1, 1, 'KMD', '', 'BTC', '', None, None),
+        (36, 'KMD-BEP20', 'BTC', '03d3afc2-273f-40a5-bcd4-31efdb6bcc8b', day_ago, day_ago + 20, 2000000, 1, 1, 'KMD', 'BEP20', 'BTC', '', None, None),
         (44, 'BTC', 'LTC', 'acf3e087-ac6f-4649-b420-5eb8e2924bf2', week_ago, week_ago + 20, 5, 1, 1, 'BTC', '', 'LTC', '', None, None),
-        (52, 'DGB', 'LTC-segwit', 'f3e0ac87-40a5-4649-b420-5eb8e2924bf2', week_ago, week_ago + 20, 1, 1, 1, 'DGB', '', 'LTC', 'segwit', None, None),
-        (55, 'DGB-segwit', 'LTC', 'cf3e0387-ac6f-a2fb-b360-4bf25fed4292', month_ago, month_ago + 20, 1, 1, 1, 'DGB', 'segwit', 'LTC', '', None, None),
+        (52, 'DGB', 'LTC-segwit', 'f3e0ac87-40a5-4649-b420-5eb8e2924bf2', week_ago, week_ago + 20, 100000, 1, 1, 'DGB', '', 'LTC', 'segwit', None, None),
+        (55, 'DGB-segwit', 'LTC', 'cf3e0387-ac6f-a2fb-b360-4bf25fed4292', month_ago, month_ago + 20, 200000, 1, 1, 'DGB', 'segwit', 'LTC', '', None, None),
         (66, 'BTC-BEP20', 'DOGE', '50d8e2e4-ee4b-494f-a2fb-48467614b613', two_months_ago, two_months_ago + 20, 1, 1, 1, 'BTC', 'BEP20', 'DOGE', '', None, None),
     ]
     DB.sql_cursor.executemany('INSERT INTO stats_swaps VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
@@ -101,16 +101,16 @@ def test_last_price_for_pair(setup_swaps_test_data):
     DB.sql_cursor = DB.conn.cursor()
 
     last_price = DB.get_last_price_for_pair(("DGB", "LTC"))
-    assert last_price == 2
+    assert last_price == Decimal('0.00001')
 
     last_price = DB.get_last_price_for_pair(("LTC", "DGB"))
-    assert last_price == 0.5
+    assert last_price == 100000
 
     last_price = DB.get_last_price_for_pair(("KMD", "BTC"))
-    assert last_price == 2.5
+    assert last_price == Decimal('0.000001')
 
     last_price = DB.get_last_price_for_pair(("BTC", "KMD"))
-    assert last_price == Decimal('0.4')
+    assert last_price == 1000000
 
     last_price = DB.get_last_price_for_pair(("x", "y"))
     assert last_price == 0
