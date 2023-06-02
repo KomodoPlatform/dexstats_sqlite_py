@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import sys
 import time
 import sqlite3
 import pytest
 from decimal import Decimal
+sys.path.append("../dexstats_sqlite_py")
 from logger import logger
-import sqlite_db
+import models
 import const
 
 now = int(time.time())
@@ -18,7 +20,7 @@ two_months_ago = now - 5184000
 @pytest.fixture
 def setup_database():
     """ Fixture to set up the in-memory database with test data """
-    DB = sqlite_db.sqliteDB(':memory:', False, "tests/test_gecko_cache.json")
+    DB = models.sqliteDB(':memory:', False, "tests/test_gecko_cache.json")
     DB.sql_cursor.execute('''
         CREATE TABLE stats_swaps (
             id INTEGER NOT NULL PRIMARY KEY,
@@ -44,7 +46,6 @@ def setup_database():
 @pytest.fixture
 def setup_swaps_test_data(setup_database):
     DB = setup_database
-    # TODO: Spoof timestamps to test range queries
     sample_data = [
         (9, 'KMD', 'MORTY', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago,
          hour_ago + 20, 1, 1, 1, 'KMD', '', 'RICK', '', None, None),
@@ -152,9 +153,9 @@ def test_get_adex_summary(setup_swaps_test_data):
     DB.sql_cursor = DB.conn.cursor()
     resp = DB.get_adex_summary()
     assert resp == {
-            "swaps_all_time": 9,
-            "swaps_24h": 4,
-            "swaps_30d": 7
+        "swaps_all_time": 9,
+        "swaps_24h": 4,
+        "swaps_30d": 7
     }
 
 
@@ -163,7 +164,7 @@ def get_actual_db_data(maker_coin: str = "BTC", limit: int = 5):
     This is just here for convienince to get data from
     actual DB for use in testing fixtures
     '''
-    DB = sqlite_db.sqliteDB(const.MM2_DB_PATH)
+    DB = models.sqliteDB(const.MM2_DB_PATH)
     DB.sql_cursor.execute('select * from stats_swaps where maker_coin = "BTC" limit 5')
     data = []
     for r in DB.sql_cursor.fetchall():
