@@ -155,7 +155,7 @@ def trades(pair="KMD_LTC"):
                 status_code=400,
                 detail="Pair cant be longer than 32 symbols"
             )
-        DB = models.sqliteDB(const.MM2_DB_PATH, dict_format=True)
+        DB = models.SqliteDB(const.MM2_DB_PATH, dict_format=True)
         pair = models.Pair(pair)
         trades_data = pair.trades(DB)
         DB.close()
@@ -169,7 +169,7 @@ def trades(pair="KMD_LTC"):
 def last_price_for_pair(pair="KMD_LTC"):
     '''Last trade price for a given pair.'''
     try:
-        DB = models.sqliteDB(const.MM2_DB_PATH, dict_format=True)
+        DB = models.SqliteDB(const.MM2_DB_PATH, dict_format=True)
         last_price = DB.get_last_price_for_pair(pair)
         DB.close()
         return last_price

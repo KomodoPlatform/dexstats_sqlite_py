@@ -20,7 +20,7 @@ two_months_ago = now - 5184000
 @pytest.fixture
 def setup_database():
     """ Fixture to set up the in-memory database with test data """
-    DB = models.sqliteDB(':memory:', False, "tests/test_gecko_cache.json")
+    DB = models.SqliteDB(':memory:', False, "tests/test_gecko_cache.json")
     DB.sql_cursor.execute('''
         CREATE TABLE stats_swaps (
             id INTEGER NOT NULL PRIMARY KEY,
@@ -164,7 +164,7 @@ def get_actual_db_data(maker_coin: str = "BTC", limit: int = 5):
     This is just here for convienince to get data from
     actual DB for use in testing fixtures
     '''
-    DB = models.sqliteDB(const.MM2_DB_PATH)
+    DB = models.SqliteDB(const.MM2_DB_PATH)
     DB.sql_cursor.execute('select * from stats_swaps where maker_coin = "BTC" limit 5')
     data = []
     for r in DB.sql_cursor.fetchall():
