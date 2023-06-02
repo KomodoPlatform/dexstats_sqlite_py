@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 import uvicorn
-import json
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_utils.tasks import repeat_every
-import stats_utils
 from logger import logger
-from cache_loops import CacheLoops
-import sqlite_db
+import models
 import const
 
-loops = CacheLoops()
+cache_get = models.CacheGet()
+cache_update = models.CacheUpdate()
 
-load_dotenv()
 app = FastAPI()
 
 app.add_middleware(
@@ -26,35 +22,37 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every minute
+@repeat_every(seconds=60)
 def cache_gecko_data():
-    result = loops.refresh_gecko_cache()
-    logger.info(result)
+    try:
+        cache_update.gecko_data()
+    except Exception as e:
+        logger.warning(f"Error in [cache_gecko_data]: {e}")
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every minute
+@repeat_every(seconds=60)
 def cache_summary_data():
     try:
-        loops.refresh_summary_cache()
+        cache_update.summary()
     except Exception as e:
         logger.warning(f"Error in [cache_summary_data]: {e}")
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)  # caching data every minute
+@repeat_every(seconds=60)
 def cache_ticker_data():
     try:
-        loops.refresh_ticker_cache()
+        cache_update.ticker()
     except Exception as e:
         logger.warning(f"Error in [cache_ticker_data]: {e}")
 
 
 @app.on_event("startup")
-@repeat_every(seconds=120)  # caching data every 10 minutes
+@repeat_every(seconds=600)  # caching data every 10 minutes
 def cache_atomicdex_io():
     try:
-        loops.refresh_adex_cache()
+        cache_update.adex()
     except Exception as e:
         logger.warning(f"Error in [cache_atomicdex_io]: {e}")
 
@@ -63,9 +61,27 @@ def cache_atomicdex_io():
 @repeat_every(seconds=600)  # caching data every 10 minutes
 def cache_atomicdex_io_fortnight():
     try:
-        loops.refresh_adex_fortnight_cache()
+        cache_update.adex_fortnight()
     except Exception as e:
         logger.warning(f"Error in [cache_atomicdex_io_fortnight]: {e}")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=86400)
+def update_coins_config():
+    try:
+        cache_update.coins_config()
+    except Exception as e:
+        logger.warning(f"Error in [update_coins_config]: {e}")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=86400)
+def update_coins():
+    try:
+        cache_update.coins()
+    except Exception as e:
+        logger.warning(f"Error in [update_coins]: {e}")
 
 
 @app.get('/api/v1/summary')
@@ -75,9 +91,7 @@ def summary():
     pairs traded in the last 7 days.
     '''
     try:
-        with open('summary_cache.json', 'r') as json_file:
-            summary_cached_data = json.load(json_file)
-            return summary_cached_data
+        return cache_get.summary()
     except Exception as e:
         logger.warning(f"Error in [/api/v1/summary]: {e}")
         return {}
@@ -90,9 +104,7 @@ def ticker():
     for all pairs traded in the last 7 days.
     '''
     try:
-        with open('ticker_cache.json', 'r') as json_file:
-            ticker_cached_data = json.load(json_file)
-            return ticker_cached_data
+        return cache_get.ticker()
     except Exception as e:
         logger.warning(f"Error in [/api/v1/ticker]: {e}")
         return {}
@@ -101,46 +113,69 @@ def ticker():
 @app.get('/api/v1/atomicdexio')
 def atomicdex_info_api():
     '''Simple Summary Statistics'''
-    with open('adex_cache.json', 'r') as json_file:
-        adex_cached_data = json.load(json_file)
-        return adex_cached_data
+    try:
+        return cache_get.adex()
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/atomicdexio]: {e}")
+        return {}
 
 
 @app.get('/api/v1/atomicdex_fortnight')
 def atomicdex_fortnight_api():
     '''Simple Summary Statistics over last 2 weeks'''
-    with open('adex_fortnight_cache.json', 'r') as json_file:
-        adex_fortnight_cache = json.load(json_file)
-        return adex_fortnight_cache
+    try:
+        return cache_get.adex_fortnight()
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/atomicdex_fortnight]: {e}")
+        return {}
 
 
-@app.get('/api/v1/orderbook/{market_pair}')
-def orderbook(market_pair="KMD_LTC"):
+@app.get('/api/v1/orderbook/{pair}')
+def orderbook(pair="KMD_LTC"):
     '''Live Orderbook for this pair'''
-    if len(market_pair) > 32:
-        raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
-    orderbook_data = stats_utils.orderbook_for_pair(market_pair, endpoint=True)
-    return orderbook_data
+    try:
+        if len(pair) > 32:
+            raise HTTPException(
+                status_code=400,
+                detail="Pair cant be longer than 32 symbols"
+            )
+        mm2 = models.DexAPI()
+        return mm2.orderbook(pair)
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/orderbook/{pair}]: {e}")
+        return {}
 
 
-@app.get('/api/v1/trades/{market_pair}')
-def trades(market_pair="KMD_LTC"):
+@app.get('/api/v1/trades/{pair}')
+def trades(pair="KMD_LTC"):
     '''Swaps for this pair in the last 24 hours'''
-    if len(market_pair) > 32:
-        raise HTTPException(status_code=400, detail="Pair cant be longer than 32 symbols")
-    DB = sqlite_db.sqliteDB(const.MM2_DB_PATH, dict_format=True)
-    trades_data = stats_utils.trades_for_pair(market_pair, DB)
-    DB.close()
-    return trades_data
+    try:
+        if len(pair) > 32:
+            raise HTTPException(
+                status_code=400,
+                detail="Pair cant be longer than 32 symbols"
+            )
+        DB = models.sqliteDB(const.MM2_DB_PATH, dict_format=True)
+        pair = models.Pair(pair)
+        trades_data = pair.trades(DB)
+        DB.close()
+        return trades_data
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/trades/{pair}]: {e}")
+        return {}
 
 
 @app.get('/api/v1/last_price/{pair}')
 def last_price_for_pair(pair="KMD_LTC"):
     '''Last trade price for a given pair.'''
-    DB = sqlite_db.sqliteDB(const.MM2_DB_PATH, dict_format=True)
-    last_price = DB.get_last_price_for_pair(pair)
-    DB.close()
-    return last_price
+    try:
+        DB = models.sqliteDB(const.MM2_DB_PATH, dict_format=True)
+        last_price = DB.get_last_price_for_pair(pair)
+        DB.close()
+        return last_price
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/last_price/{pair}]: {e}")
+        return 0
 
 
 if __name__ == '__main__':
