@@ -7,11 +7,9 @@ from logger import logger
 import models
 import const
 
-cache_get = models.CacheGet()
-cache_update = models.CacheUpdate()
+cache = models.Cache()
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,43 +23,43 @@ app.add_middleware(
 @repeat_every(seconds=60)
 def cache_gecko_data():
     try:
-        cache_update.gecko_data()
+        cache.save.gecko_data()
     except Exception as e:
         logger.warning(f"Error in [cache_gecko_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)
-def cache_summary_data():
+def cache_summary():
     try:
-        cache_update.summary()
+        cache.save.summary()
     except Exception as e:
         logger.warning(f"Error in [cache_summary_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=60)
-def cache_ticker_data():
+def cache_ticker():
     try:
-        cache_update.ticker()
+        cache.save.ticker()
     except Exception as e:
         logger.warning(f"Error in [cache_ticker_data]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=600)  # caching data every 10 minutes
-def cache_atomicdex_io():
+def cache_atomicdexio():
     try:
-        cache_update.adex()
+        cache.save.atomicdexio()
     except Exception as e:
         logger.warning(f"Error in [cache_atomicdex_io]: {e}")
 
 
 @app.on_event("startup")
 @repeat_every(seconds=600)  # caching data every 10 minutes
-def cache_atomicdex_io_fortnight():
+def cache_atomicdex_fortnight():
     try:
-        cache_update.adex_fortnight()
+        cache.save.atomicdex_fortnight()
     except Exception as e:
         logger.warning(f"Error in [cache_atomicdex_io_fortnight]: {e}")
 
@@ -70,7 +68,7 @@ def cache_atomicdex_io_fortnight():
 @repeat_every(seconds=86400)
 def update_coins_config():
     try:
-        cache_update.coins_config()
+        cache.save.coins_config()
     except Exception as e:
         logger.warning(f"Error in [update_coins_config]: {e}")
 
@@ -79,9 +77,32 @@ def update_coins_config():
 @repeat_every(seconds=86400)
 def update_coins():
     try:
-        cache_update.coins()
+        cache.save.coins()
     except Exception as e:
         logger.warning(f"Error in [update_coins]: {e}")
+
+
+# //////////////////////////// #
+# Routes retrieved from cache  #
+# //////////////////////////// #
+@app.get('/api/v1/atomicdexio')
+def atomicdexio():
+    '''Simple Summary Statistics for last 24 hours'''
+    try:
+        return cache.load.atomicdexio()
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/atomicdexio]: {e}")
+        return {}
+
+
+@app.get('/api/v1/atomicdex_fortnight')
+def atomicdex_fortnight():
+    '''Extra Summary Statistics over last 2 weeks'''
+    try:
+        return cache.load.atomicdex_fortnight()
+    except Exception as e:
+        logger.warning(f"Error in [/api/v1/atomicdex_fortnight]: {e}")
+        return {}
 
 
 @app.get('/api/v1/summary')
@@ -91,7 +112,7 @@ def summary():
     pairs traded in the last 7 days.
     '''
     try:
-        return cache_get.summary()
+        return cache.load.summary()
     except Exception as e:
         logger.warning(f"Error in [/api/v1/summary]: {e}")
         return {}
@@ -104,32 +125,15 @@ def ticker():
     for all pairs traded in the last 7 days.
     '''
     try:
-        return cache_get.ticker()
+        return cache.load.ticker()
     except Exception as e:
         logger.warning(f"Error in [/api/v1/ticker]: {e}")
         return {}
 
 
-@app.get('/api/v1/atomicdexio')
-def atomicdex_info_api():
-    '''Simple Summary Statistics'''
-    try:
-        return cache_get.adex()
-    except Exception as e:
-        logger.warning(f"Error in [/api/v1/atomicdexio]: {e}")
-        return {}
-
-
-@app.get('/api/v1/atomicdex_fortnight')
-def atomicdex_fortnight_api():
-    '''Simple Summary Statistics over last 2 weeks'''
-    try:
-        return cache_get.adex_fortnight()
-    except Exception as e:
-        logger.warning(f"Error in [/api/v1/atomicdex_fortnight]: {e}")
-        return {}
-
-
+# ////////////////////////// #
+# Routes retrieved from mm2  #
+# ////////////////////////// #
 @app.get('/api/v1/orderbook/{pair}')
 def orderbook(pair="KMD_LTC"):
     '''Live Orderbook for this pair'''
