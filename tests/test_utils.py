@@ -1,11 +1,35 @@
 #!/usr/bin/env python3
-import sqlite3
+import pytest
 from test_sqlitedb import setup_swaps_test_data, setup_database
+from test_cache import setup_cache
 import models
 
 
-def test_get_suffix():
-    utils = models.Utils()
+@pytest.fixture
+def setup_utils():
+    yield models.Utils()
+
+
+def test_find_lowest_ask(setup_utils):
+    utils = setup_utils
+    orderbook = utils.load_jsonfile("tests/fixtures/orderbook_BTC_DOGE.json")
+    r = utils.find_lowest_ask(orderbook)
+    assert r["price"] == 0.001
+    assert r["volume"] == 1000
+    assert r["type"] == "sell"
+
+
+def test_find_highest_bid(setup_utils):
+    utils = setup_utils
+    orderbook = utils.load_jsonfile("tests/fixtures/orderbook_BTC_DOGE.json")
+    r = utils.find_highest_bid(orderbook)
+    assert r["price"] == 0.001
+    assert r["volume"] == 1000
+    assert r["type"] == "sell"
+
+
+def test_get_suffix(setup_utils):
+    utils = setup_utils
     assert utils.get_suffix(1) == "24h"
     assert utils.get_suffix(8) == "8d"
 
@@ -61,8 +85,8 @@ def test_orderbook_for_pair():
     pass
 
 
-def test_get_chunks():
-    utils = models.Utils()
+def test_get_chunks(setup_utils):
+    utils = setup_utils
     data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     chunks = list(utils.get_chunks(data, 3))
     assert len(chunks) == 4
@@ -75,7 +99,7 @@ def test_get_coins_config():
     pass
 
 
-def test_get_data_from_gecko():
+def test_get_gecko_data():
     # Not TODO: This queries external api, so not sure how to test yet.
     # Might break it down a it into smaller functions
     pass
@@ -91,7 +115,7 @@ def test_get_value():
     pass
 
 
-def test_atomicdex_timespan_info():
+def test_atomicdex_fortnight():
     # TODO: Needs a fixture
     pass
 
@@ -99,3 +123,14 @@ def test_atomicdex_timespan_info():
 def test_get_top_pairs():
     # TODO: Needs a fixture
     pass
+
+
+def test_get_gecko_usd_price(setup_utils, setup_cache):
+    utils = setup_utils
+    cache = setup_cache
+    assert cache.files.gecko_data == "tests/fixtures/gecko_cache.json"
+    assert utils.get_gecko_usd_price("KMD", cache.gecko_data) == 1
+    assert utils.get_gecko_usd_price("BTC", cache.gecko_data) == 1000000
+    price1 = utils.get_gecko_usd_price("LTC-segwit", cache.gecko_data)
+    price2 = utils.get_gecko_usd_price("LTC", cache.gecko_data)
+    assert price1 == price2

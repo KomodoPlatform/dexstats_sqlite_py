@@ -11,6 +11,7 @@ import const
 
 now = int(time.time())
 hour_ago = now - 3600
+two_hours_ago = now - 7200
 day_ago = now - 86400
 week_ago = now - 604800
 month_ago = now - 2592000
@@ -20,7 +21,7 @@ two_months_ago = now - 5184000
 @pytest.fixture
 def setup_database():
     """ Fixture to set up the in-memory database with test data """
-    DB = models.SqliteDB(':memory:', False, "tests/test_gecko_cache.json")
+    DB = models.SqliteDB(':memory:', False, True)
     DB.sql_cursor.execute('''
         CREATE TABLE stats_swaps (
             id INTEGER NOT NULL PRIMARY KEY,
@@ -47,26 +48,32 @@ def setup_database():
 def setup_swaps_test_data(setup_database):
     DB = setup_database
     sample_data = [
-        (9, 'KMD', 'MORTY', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago,
-         hour_ago + 20, 1, 1, 1, 'KMD', '', 'RICK', '', None, None),
-        (11, 'DGB-segwit', 'KMD-BEP20', '50fe4211-fd33-4dc4-2a7f-f6320b1d3b64', hour_ago,
-         hour_ago + 20, 1000, 1, 1, 'DGB', 'segwit', 'KMD', 'BEP20', None, None),
-        (22, 'MCL', 'KMD', '4d1dc872-7262-46b7-840d-5e9b1aad243f', hour_ago,
-         hour_ago + 20, 1, 1, 0, 'KMD', '', 'USDC', '', None, None),
-        (27, 'BTC', 'MATIC', '8724d1dc-2762-4633-8add-6ad2e9b1a4e7', hour_ago,
-         hour_ago + 20, 1, 1, 1, 'BTC', '', 'MATIC', '', None, None),
-        (47, 'KMD', 'BTC', '24d1dc87-7622-6334-add8-9b1a4e76ad2e', hour_ago - 10,
-         hour_ago + 10, 1000000, 1, 1, 'KMD', '', 'BTC', '', None, None),
-        (36, 'KMD-BEP20', 'BTC', '03d3afc2-273f-40a5-bcd4-31efdb6bcc8b', day_ago,
-         day_ago + 20, 2000000, 1, 1, 'KMD', 'BEP20', 'BTC', '', None, None),
-        (44, 'BTC', 'LTC', 'acf3e087-ac6f-4649-b420-5eb8e2924bf2', week_ago,
-         week_ago + 20, 5, 1, 1, 'BTC', '', 'LTC', '', None, None),
-        (52, 'DGB', 'LTC-segwit', 'f3e0ac87-40a5-4649-b420-5eb8e2924bf2', week_ago,
-         week_ago + 20, 100000, 1, 1, 'DGB', '', 'LTC', 'segwit', None, None),
-        (55, 'DGB-segwit', 'LTC', 'cf3e0387-ac6f-a2fb-b360-4bf25fed4292', month_ago,
-         month_ago + 20, 200000, 1, 1, 'DGB', 'segwit', 'LTC', '', None, None),
-        (66, 'BTC-BEP20', 'DOGE', '50d8e2e4-ee4b-494f-a2fb-48467614b613', two_months_ago,
-         two_months_ago + 20, 1, 1, 1, 'BTC', 'BEP20', 'DOGE', '', None, None),
+        (1, 'KMD', 'MORTY', '01fe4251-ffe1-4c7a-ad7f-04b1df6323b6', hour_ago - 1,
+         hour_ago + 1, 1, 1, 1, 'KMD', '', 'MORTY', '', None, None),
+        (2, 'DGB-segwit', 'KMD-BEP20', '50fe4211-fd33-4dc4-2a7f-f6320b1d3b64', hour_ago - 2,
+         hour_ago + 2, 1000, 1, 1, 'DGB', 'segwit', 'KMD', 'BEP20', None, None),
+        (3, 'MCL', 'KMD', '4d1dc872-7262-46b7-840d-5e9b1aad243f', hour_ago - 3,
+         hour_ago + 3, 1, 1, 0, 'MCL', '', 'KMD', '', None, None),
+        (4, 'DGB', 'DOGE', '0d232e54-ee4b-494f-a2fb-48467614b613', hour_ago - 4,
+         hour_ago + 4, 1, 1, 1, 'DGB', '', 'DOGE', '', None, None),
+        (5, 'LTC', 'KMD', '71dcc872-75a2-d4ef-009d-5e9baad162ef', hour_ago - 5,
+         hour_ago + 5, 1, 10, 1, 'LTC', '', 'KMD', '', None, None),
+        (6, 'BTC', 'DOGE', '8724d1dc-2762-4633-8add-6ad2e9b1a4e7', hour_ago - 6,
+         hour_ago + 6, 1, 1, 1, 'BTC', '', 'DOGE', '', None, None),
+        (7, 'KMD', 'BTC', '24d1dc87-7622-6334-add8-9b1a4e76ad2e', hour_ago - 7,
+         hour_ago + 7, 1000000, 1, 1, 'KMD', '', 'BTC', '', None, None),
+        (8, 'LTC', 'KMD', 'c871dc72-73a2-d46d-900d-aad5e9b162ef', two_hours_ago - 8,
+         two_hours_ago + 8, 1, 100, 1, 'LTC', '', 'KMD', '', None, None),
+        (9, 'KMD-BEP20', 'BTC', '03d3afc2-273f-40a5-bcd4-31efdb6bcc8b', day_ago - 9,
+         day_ago + 9, 2000000, 1, 1, 'KMD', 'BEP20', 'BTC', '', None, None),
+        (10, 'BTC', 'LTC', 'acf3e087-ac6f-4649-b420-5eb8e2924bf2', week_ago - 10,
+         week_ago + 10, 5, 1, 1, 'BTC', '', 'LTC', '', None, None),
+        (11, 'DGB', 'LTC-segwit', 'f3e0ac87-40a5-4649-b420-5eb8e2924bf2', week_ago - 11,
+         week_ago + 11, 100000, 1, 1, 'DGB', '', 'LTC', 'segwit', None, None),
+        (12, 'DGB-segwit', 'LTC', 'cf3e0387-ac6f-a2fb-b360-4bf25fed4292', month_ago - 12,
+         month_ago + 12, 200000, 1, 1, 'DGB', 'segwit', 'LTC', '', None, None),
+        (13, 'LTC', 'DOGE', '50d8e2e4-ee4b-494f-a2fb-48467614b613', two_months_ago - 13,
+         two_months_ago + 13, 1, 1, 1, 'LTC', '', 'DOGE', '', None, None),
     ]
     sql = 'INSERT INTO stats_swaps VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     DB.sql_cursor.executemany(sql, sample_data)
@@ -81,12 +88,13 @@ def test_get_pairs(setup_swaps_test_data):
     assert ("DGB", "LTC") not in pairs
     assert ("KMD", "BTC") in pairs
     assert ("BTC", "KMD") not in pairs
+    assert len(pairs) == 6
     pairs = DB.get_pairs(45)
     assert ("MCL", "KMD") not in pairs
     assert ("DGB", "LTC") in pairs
-    assert ("DOGE", "BTC") not in pairs
+    assert ("DOGE", "LTC") not in pairs
     pairs = DB.get_pairs(90)
-    assert ("DOGE", "BTC") in pairs
+    assert ("DOGE", "LTC") in pairs
 
 
 def test_get_swaps_for_pair(setup_swaps_test_data):
@@ -97,7 +105,7 @@ def test_get_swaps_for_pair(setup_swaps_test_data):
     swaps = DB.get_swaps_for_pair(("MCL", "KMD"), day_ago)
     assert len(swaps) == 0
 
-    swaps = DB.get_swaps_for_pair(("MATIC", "BTC"), day_ago)
+    swaps = DB.get_swaps_for_pair(("DOGE", "BTC"), day_ago)
     assert len(swaps) == 1
     assert swaps[0]["trade_type"] == "sell"
 
@@ -111,19 +119,19 @@ def test_last_price_for_pair(setup_swaps_test_data):
     DB.conn.row_factory = sqlite3.Row
     DB.sql_cursor = DB.conn.cursor()
 
-    last_price = DB.get_last_price_for_pair(("DGB", "LTC"))
+    last_price = DB.get_last_price_for_pair("DGB", "LTC")
     assert last_price == Decimal('0.00001')
 
-    last_price = DB.get_last_price_for_pair(("LTC", "DGB"))
+    last_price = DB.get_last_price_for_pair("LTC", "DGB")
     assert last_price == 100000
 
-    last_price = DB.get_last_price_for_pair(("KMD", "BTC"))
+    last_price = DB.get_last_price_for_pair("KMD", "BTC")
     assert last_price == Decimal('0.000001')
 
-    last_price = DB.get_last_price_for_pair(("BTC", "KMD"))
+    last_price = DB.get_last_price_for_pair("BTC", "KMD")
     assert last_price == 1000000
 
-    last_price = DB.get_last_price_for_pair(("x", "y"))
+    last_price = DB.get_last_price_for_pair("x", "y")
     assert last_price == 0
 
 
@@ -132,30 +140,30 @@ def test_timespan_swaps(setup_swaps_test_data):
     DB.sql_cursor = DB.conn.cursor()
 
     swaps = DB.get_timespan_swaps()
-    assert len(swaps) == 4
+    assert len(swaps) == 7
 
     swaps = DB.get_timespan_swaps(7)
     logger.info(swaps)
-    assert len(swaps) == 5
-
-    swaps = DB.get_timespan_swaps(30)
-    assert len(swaps) == 7
-
-    swaps = DB.get_timespan_swaps(60)
     assert len(swaps) == 8
 
+    swaps = DB.get_timespan_swaps(30)
+    assert len(swaps) == 10
+
+    swaps = DB.get_timespan_swaps(60)
+    assert len(swaps) == 11
+
     swaps = DB.get_timespan_swaps(9999)
-    assert len(swaps) == 9
+    assert len(swaps) == 12
 
 
-def test_get_adex_summary(setup_swaps_test_data):
+def test_get_atomicdexio(setup_swaps_test_data):
     DB = setup_swaps_test_data
     DB.sql_cursor = DB.conn.cursor()
-    resp = DB.get_adex_summary()
+    resp = DB.get_atomicdexio()
     assert resp == {
-        "swaps_all_time": 9,
-        "swaps_24h": 4,
-        "swaps_30d": 7
+        "swaps_all_time": 12,
+        "swaps_24h": 7,
+        "swaps_30d": 10
     }
 
 
