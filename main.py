@@ -25,7 +25,7 @@ def cache_gecko_data():
     try:
         cache.save.gecko_data()
     except Exception as e:
-        logger.warning(f"Error in [cache_gecko_data]: {e}")
+        logger.warning(f"{type(e)} Error in [cache_gecko_data]: {e}")
 
 
 @app.on_event("startup")
@@ -34,7 +34,7 @@ def cache_summary():
     try:
         cache.save.summary()
     except Exception as e:
-        logger.warning(f"Error in [cache_summary_data]: {e}")
+        logger.warning(f"{type(e)} Error in [cache_summary_data]: {e}")
 
 
 @app.on_event("startup")
@@ -43,7 +43,7 @@ def cache_ticker():
     try:
         cache.save.ticker()
     except Exception as e:
-        logger.warning(f"Error in [cache_ticker_data]: {e}")
+        logger.warning(f"{type(e)} Error in [cache_ticker_data]: {e}")
 
 
 @app.on_event("startup")
@@ -52,7 +52,7 @@ def cache_atomicdexio():
     try:
         cache.save.atomicdexio()
     except Exception as e:
-        logger.warning(f"Error in [cache_atomicdex_io]: {e}")
+        logger.warning(f"{type(e)} Error in [cache_atomicdex_io]: {e}")
 
 
 @app.on_event("startup")
@@ -61,7 +61,7 @@ def cache_atomicdex_fortnight():
     try:
         cache.save.atomicdex_fortnight()
     except Exception as e:
-        logger.warning(f"Error in [cache_atomicdex_io_fortnight]: {e}")
+        logger.warning(f"{type(e)} Error in [cache_atomicdex_io_fortnight]: {e}")
 
 
 @app.on_event("startup")
@@ -70,7 +70,7 @@ def update_coins_config():
     try:
         cache.save.coins_config()
     except Exception as e:
-        logger.warning(f"Error in [update_coins_config]: {e}")
+        logger.warning(f"{type(e)} Error in [update_coins_config]: {e}")
 
 
 @app.on_event("startup")
@@ -79,7 +79,7 @@ def update_coins():
     try:
         cache.save.coins()
     except Exception as e:
-        logger.warning(f"Error in [update_coins]: {e}")
+        logger.warning(f"{type(e)} Error in [update_coins]: {e}")
 
 
 # //////////////////////////// #
@@ -91,7 +91,7 @@ def atomicdexio():
     try:
         return cache.load.atomicdexio()
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/atomicdexio]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/atomicdexio]: {e}")
         return {}
 
 
@@ -101,7 +101,7 @@ def atomicdex_fortnight():
     try:
         return cache.load.atomicdex_fortnight()
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/atomicdex_fortnight]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/atomicdex_fortnight]: {e}")
         return {}
 
 
@@ -114,7 +114,7 @@ def summary():
     try:
         return cache.load.summary()
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/summary]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/summary]: {e}")
         return {}
 
 
@@ -127,7 +127,7 @@ def ticker():
     try:
         return cache.load.ticker()
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/ticker]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/ticker]: {e}")
         return {}
 
 
@@ -146,7 +146,7 @@ def orderbook(pair="KMD_LTC"):
         mm2 = models.DexAPI()
         return mm2.orderbook(pair)
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/orderbook/{pair}]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/orderbook/{pair}]: {e}")
         return {}
 
 
@@ -161,11 +161,11 @@ def trades(pair="KMD_LTC"):
             )
         DB = models.SqliteDB(const.MM2_DB_PATH, dict_format=True)
         pair = models.Pair(pair)
-        trades_data = pair.trades(DB)
+        trades_data = pair.trades(days=1)
         DB.close()
         return trades_data
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/trades/{pair}]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/trades/{pair}]: {e}")
         return {}
 
 
@@ -178,7 +178,7 @@ def last_price_for_pair(pair="KMD_LTC"):
         DB.close()
         return last_price
     except Exception as e:
-        logger.warning(f"Error in [/api/v1/last_price/{pair}]: {e}")
+        logger.warning(f"{type(e)} Error in [/api/v1/last_price/{pair}]: {e}")
         return 0
 
 
