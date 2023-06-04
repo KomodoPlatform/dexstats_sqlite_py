@@ -1,31 +1,27 @@
 #!/usr/bin/env python3
-import pytest
-from test_sqlitedb import setup_swaps_test_data, setup_database
-from test_cache import setup_cache
-import models
+from fixtures import (
+    setup_swaps_test_data,
+    setup_database,
+    setup_utils,
+    setup_orderbook_data,
+    setup_time,
+    setup_cache,
+    logger,
+)
 
 
-@pytest.fixture
-def setup_utils():
-    yield models.Utils()
-
-
-def test_find_lowest_ask(setup_utils):
+def test_find_lowest_ask(setup_utils, setup_orderbook_data):
     utils = setup_utils
-    orderbook = utils.load_jsonfile("tests/fixtures/orderbook_BTC_DOGE.json")
+    orderbook = setup_orderbook_data
     r = utils.find_lowest_ask(orderbook)
-    assert r["price"] == 0.001
-    assert r["volume"] == 1000
-    assert r["type"] == "sell"
+    assert float(r) > 0
 
 
-def test_find_highest_bid(setup_utils):
+def test_find_highest_bid(setup_utils, setup_orderbook_data):
     utils = setup_utils
-    orderbook = utils.load_jsonfile("tests/fixtures/orderbook_BTC_DOGE.json")
+    orderbook = setup_orderbook_data
     r = utils.find_highest_bid(orderbook)
-    assert r["price"] == 0.001
-    assert r["volume"] == 1000
-    assert r["type"] == "sell"
+    assert float(r) > 0
 
 
 def test_get_suffix(setup_utils):
@@ -51,16 +47,6 @@ def test_get_volumes_and_prices(setup_swaps_test_data):
     # DB = setup_swaps_test_data
     # pair = ("DGB", "LTC")
     # swaps_for_pair = DB.get_swaps_for_pair(pair)
-    # TODO: Needs a fixture
-    pass
-
-
-def test_find_lowest_ask():
-    # TODO: Needs a fixture
-    pass
-
-
-def test_find_highest_bid():
     # TODO: Needs a fixture
     pass
 
@@ -94,7 +80,13 @@ def test_get_chunks(setup_utils):
     assert len(chunks[3]) == 1
 
 
-def test_get_coins_config():
+def test_download_json(setup_utils):
+    utils = setup_utils
+    data = utils.download_json("https://api.coingecko.com/api/v3/coins/list")
+    assert len(data) > 0
+    data = utils.download_json("foo")
+    assert data is None
+
     # TODO: Needs a fixture
     pass
 
