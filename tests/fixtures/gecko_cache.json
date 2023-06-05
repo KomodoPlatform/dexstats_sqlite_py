@@ -1,0 +1,52 @@
+{
+    "KMD": {
+        "usd_market_cap": 777,
+        "usd_price": 1,
+        "coingecko_id": "komodo"
+    },
+    "KMD-BEP20": {
+        "usd_market_cap": 777,
+        "usd_price": 1,
+        "coingecko_id": "komodo"
+    },
+    "DGB": {
+        "usd_market_cap": 1,
+        "usd_price": 0.01,
+        "coingecko_id": "digibyte"
+    },
+    "DGB-segwit": {
+        "usd_market_cap": 1,
+        "usd_price": 0.01,
+        "coingecko_id": "digibyte"
+    },
+    "BTC": {
+        "usd_market_cap": 1000000,
+        "usd_price": 1000000,
+        "coingecko_id": "bitcoin"
+    },
+    "BTC-BEP20": {
+        "usd_market_cap": 1000000,
+        "usd_price": 1000000,
+        "coingecko_id": "bitcoin"
+    },
+    "LTC": {
+        "usd_market_cap": 1000,
+        "usd_price": 100,
+        "coingecko_id": "litecoin"
+    },
+    "LTC-segwit": {
+        "usd_market_cap": 1000,
+        "usd_price": 100,
+        "coingecko_id": "litecoin"
+    },
+    "DOGE": {
+        "usd_market_cap": 333,
+        "usd_price": 0.1,
+        "coingecko_id": "dogecoin"
+    },
+    "USDC": {
+        "usd_market_cap": 28896428880.561565,
+        "usd_price": 1.0,
+        "coingecko_id": "usd-coin"
+    }
+}
