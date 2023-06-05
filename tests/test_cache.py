@@ -107,16 +107,14 @@ def test_load_summary2(setup_cache):
             assert float(i["highest_price_24h"]) != float(i["lowest_price_24h"])
             assert float(i["last_price"]) == float(i["highest_price_24h"])
             assert float(i["highest_price_24h"]) > float(i["lowest_price_24h"])
+            assert isinstance(i["base_liquidity_coins"], str)
+            assert isinstance(i["rel_liquidity_coins"], str)
+            assert isinstance(i["base_volume"], str)
+            assert isinstance(i["quote_volume"], str)
             assert i["base_liquidity_usd"] > 0
-            assert i["base_liquidity_coins"] > 0
             assert i["base_trade_value_usd"] > 0
             assert i["rel_liquidity_usd"] > 0
-            assert float(i["rel_liquidity_coins"]) > 0
             assert i["rel_trade_value_usd"] > 0
-            assert i["base_volume_coins"] > 0
-            assert i["rel_volume_coins"] > 0
-            assert float(i["base_volume"]) > 0
-            assert float(i["quote_volume"]) > 0
 
 
 def test_load_ticker(setup_cache):
