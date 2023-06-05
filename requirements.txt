@@ -1,3 +1,10 @@
 uvicorn==0.13.3
 fastapi==0.63.0
+fastapi-utils==0.2.1
 python-dotenv==0.21.1
+httpx==0.24.1
+requests==2.31.0
+pytest-cov==4.1.0
+pytest==7.2.1
+flake8==4.0.1
+pytest-flake8==1.1.1

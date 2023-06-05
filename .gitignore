@@ -5,3 +5,7 @@ __pycache__/
 *.log
 *.db
 .env
+.venv/
+.coverage
+.pytest_cache/
+.vscode/
