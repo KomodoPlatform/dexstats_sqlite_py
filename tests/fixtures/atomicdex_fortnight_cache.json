@@ -1,0 +1,29 @@
+{
+    "days": 14,
+    "swaps_count": 10,
+    "swaps_value": 11001522.21,
+    "top_pairs": {
+        "by_value_traded_usd": {
+            "LTC_BTC": 5000100.0,
+            "KMD_BTC": 5000000.0,
+            "DOGE_BTC": 1000000.1,
+            "DGB_LTC": 1100.0,
+            "KMD_LTC": 310.0
+        },
+        "by_current_liquidity_usd": {
+            "KMD_BTC": 410504.36713958,
+            "DOGE_BTC": 343535.31359348,
+            "LTC_BTC": 341183.178549,
+            "DGB_KMD": 14701.85202384,
+            "KMD_LTC": 14595.02850554
+        },
+        "by_swaps_count": {
+            "KMD_BTC": 2,
+            "KMD_LTC": 2,
+            "DOGE_BTC": 1,
+            "LTC_BTC": 1,
+            "DGB_KMD": 1
+        }
+    },
+    "current_liquidity": 1129006.80849509
+}
