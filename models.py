@@ -106,7 +106,7 @@ class Cache:
             try:
                 DB = self.utils.get_db(self.db_path, self.DB)
                 pairs = DB.get_pairs(days)
-                logger.info(f"{len(pairs)} pairs ({days} days)")
+                logger.debug(f"Calculating atomicdexio stats for {len(pairs)} pairs ({days} days)")
                 pair_summaries = [
                     Pair(i, self.db_path, self.testing, DB=DB).summary(days) for i in pairs
                 ]
@@ -115,7 +115,7 @@ class Cache:
                     data = DB.get_atomicdexio()
                 else:
                     swaps = DB.get_timespan_swaps(days)
-                    logger.info(f"{len(swaps)} swaps ({days} days)")
+                    logger.debug(f"{len(swaps)} swaps ({days} days)")
                     data = {
                         "days": days,
                         "swaps_count": len(swaps),
@@ -139,10 +139,10 @@ class Cache:
                 DB = SqliteDB(self.db_path)
                 DB = self.utils.get_db(self.db_path, self.DB)
                 pairs = DB.get_pairs(days)
-                logger.info(f"Calculating pair summaries for {len(pairs)} pairs ({days} days)")
+                logger.debug(f"Calculating pair summaries for {len(pairs)} pairs ({days} days)")
                 data = [Pair(i, self.db_path, self.testing, DB=DB).summary(days) for i in pairs]
                 if clean:
-                    return self.utils.clean_decimal_dict_list(data)
+                    data = self.utils.clean_decimal_dict_list(data)
                 return data
             except Exception as e:
                 logger.error(f"{type(e)} Error in [Cache.calc.pair_summaries]: {e}")
@@ -152,7 +152,7 @@ class Cache:
             try:
                 DB = self.utils.get_db(self.db_path, self.DB)
                 pairs = DB.get_pairs(days)
-                logger.info(f"Calculating ticker cache for {len(pairs)} pairs ({days} days)")
+                logger.debug(f"Calculating ticker cache for {len(pairs)} pairs ({days} days)")
                 return [Pair(i, self.db_path, self.testing, DB=DB).ticker(days) for i in pairs]
             except Exception as e:
                 logger.error(f"{type(e)} Error in [Cache.calc.ticker]: {e}")
@@ -484,7 +484,9 @@ class Pair:
         try:
             trades_info = []
             timestamp = int((datetime.now() - timedelta(days)).strftime("%s"))
-            swaps_for_pair = self.DB.get_swaps_for_pair(self.as_tuple, timestamp)
+            DB = self.utils.get_db(self.db_path, self.DB)
+            swaps_for_pair = DB.get_swaps_for_pair(self.as_tuple, timestamp)
+            logger.info(f"{len(swaps_for_pair)} swaps_for_pair:")
             for swap in swaps_for_pair:
                 trade_info = OrderedDict()
                 trade_info["trade_id"] = swap["uuid"]
@@ -603,8 +605,8 @@ class Pair:
 
             data["base_price_usd"] = base_price
             data["rel_price_usd"] = quote_price
-            data["base_volume_coins"] = base_volume
-            data["rel_volume_coins"] = quote_volume
+            data["base_volume"] = base_volume
+            data["rel_volume"] = quote_volume
         except Exception as e:
             logger.error(f"{type(e)} Error in [Pair.summary] for {self.as_str}: {e}")
 
@@ -650,6 +652,14 @@ class Pair:
         rel_trade_value_usd = Decimal(data["rel_trade_value_usd"])
         pair_trade_value_usd = rel_trade_value_usd + base_trade_value_usd
         data["pair_trade_value_usd"] = pair_trade_value_usd
+        string_fields = [
+            "base_liquidity_coins",
+            "rel_liquidity_coins",
+            "base_volume",
+            "rel_volume"
+        ]
+        data = self.utils.values_to_str(data, string_fields)
+
         return data
 
 
@@ -870,8 +880,8 @@ class Templates:
         data["pair_swaps_count"] = 0
         data["base_price_usd"] = 0
         data["rel_price_usd"] = 0
-        data["base_volume_coins"] = 0
-        data["rel_volume_coins"] = 0
+        data["base_volume"] = 0
+        data["rel_volume"] = 0
         data["base_liquidity_coins"] = 0
         data["base_liquidity_usd"] = 0
         data["base_trade_value_usd"] = 0
@@ -926,6 +936,13 @@ class Utils:
             return DB
         return SqliteDB(db_path)
 
+    def values_to_str(self, data: dict, string_fields: list) -> dict:
+        for field in string_fields:
+            if field in data:
+                if not isinstance(data[field], str):
+                    data[field] = self.round_to_str(data[field])
+        return data
+
     def load_jsonfile(self, path, attempts=5):
         i = 0
         while True:
@@ -952,8 +969,7 @@ class Utils:
                 value = Decimal(value)
             if isinstance(value, Decimal):
                 value = value.quantize(Decimal(f'1.{"0" * rounding}'))
-                if value < Decimal("1e-12"):
-                    value = f"{value:.13f}"
+                value = f"{value:.{rounding}f}"
             return value
         except (ValueError, TypeError):
             return "0"
@@ -1129,6 +1145,8 @@ class DexAPI:
     # returning orderbook for given trading pair
     def orderbook(self, pair):
         try:
+            if isinstance(pair, str):
+                pair = pair.split("_")
             base = pair[0]
             quote = pair[1]
             if base not in self.coins_config or quote not in self.coins_config:
