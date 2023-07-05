@@ -16,6 +16,8 @@ def check_if_pair_is_fresh(sql_coursor, pair, timestamp):
 
 path_to_db = "/Users/antonlysakov/devel/MM2.db"
 
+#TODO: break me to functions
+
 timestamp_2020_start = 1577836800
 timestamp_2020_end   = 1609459200
 timestamp_2021_start = 1609459201
@@ -115,7 +117,7 @@ for pair in available_pairs:
     pairs_volumes_2023[pair[0]+"_"+pair[1]] = int(pair_usd_volume_2023)
 
 # sorting by volume
-pairs_volumes_2023 = dict(sorted(pairs_volumes_2021.items(), key=lambda item: item[1], reverse=True))
+pairs_volumes_2023 = dict(sorted(pairs_volumes_2023.items(), key=lambda item: item[1], reverse=True))
 
 conn.close()
 
