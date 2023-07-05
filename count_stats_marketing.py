@@ -21,7 +21,7 @@ timestamp_2020_end   = 1609459200
 timestamp_2021_start = 1609459201
 timestamp_2021_end   = 1640995200
 
-usd_prices = requests.get("https://prices.komodo.live:1313/api/v2/tickers").json()
+usd_prices = requests.get("https://prices.komodo.earth:1313/api/v2/tickers").json()
 
 conn = sqlite3.connect(path_to_db)
 conn.row_factory = sqlite3.Row
