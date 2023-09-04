@@ -87,7 +87,10 @@ def update_coins():  # pragma: no cover
 # //////////////////////////// #
 @app.get('/api/v1/atomicdexio')
 def atomicdexio():
-    '''Simple Summary Statistics for last 24 hours'''
+    '''
+    Simple Summary Statistics used on atomicdex.io website.
+    Updates every 10 minutes.
+    '''
     try:
         return cache.load.atomicdexio()
     except Exception as e:  # pragma: no cover
@@ -97,7 +100,10 @@ def atomicdexio():
 
 @app.get('/api/v1/atomicdex_fortnight')
 def atomicdex_fortnight():
-    '''Extra Summary Statistics over last 2 weeks'''
+    '''
+    Verbose Summary Statistics for the last 14 days.
+    Updates every 10 minutes.
+    '''
     try:
         return cache.load.atomicdex_fortnight()
     except Exception as e:  # pragma: no cover
@@ -108,7 +114,7 @@ def atomicdex_fortnight():
 @app.get('/api/v1/summary')
 def summary():
     '''
-    Trade summary for the last 24 hours for all
+    Pair summary for the last 24 hours for all
     pairs traded in the last 7 days.
     '''
     try:
