@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import logging
+import os
+import sys
 
+logger_app_name = os.path.basename(sys.argv[0]).split(".")[0]
 
 class CustomFormatter(logging.Formatter):
 
@@ -27,15 +30,15 @@ class CustomFormatter(logging.Formatter):
     red = "\x1b[31;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s (%(filename)s:%(lineno)d)"
-    datefmt = '%d-%b-%y %H:%M:%S'
+    format = "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)-80s (%(filename)s:%(lineno)d)"  # type: ignore
+    datefmt = "%d-%b-%y %H:%M:%S"
 
     FORMATS = {
-        logging.DEBUG: lightblue + format + reset,
-        logging.INFO: lightgreen + format + reset,
-        logging.WARNING: red + format + reset,
-        logging.ERROR: lightred + format + reset,
-        logging.CRITICAL: bold_red + format + reset
+        logging.DEBUG: f"{lightblue}{format}{reset}",
+        logging.INFO: f"{lightgreen}{format}{reset}",
+        logging.WARNING: f"{red}{format}{reset}",
+        logging.ERROR: f"{lightred}{format}{reset}",
+        logging.CRITICAL: f"{bold_red}{format}{reset}",
     }
 
     def format(self, record):
@@ -44,11 +47,22 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-# create logger with 'destats_app'
-logger = logging.getLogger("dexstats_app")
+# create logger with project folder name
+logging.basicConfig()
+logger = logging.getLogger(logger_app_name)
 logger.setLevel(logging.DEBUG)
+logger.propagate = False
 
 # create console handler with a higher log level
 handler = logging.StreamHandler()
 handler.setFormatter(CustomFormatter())
 logger.addHandler(handler)
+
+
+if __name__ == "__main__":
+    logger.debug("debug message")
+    logger.info("info message")
+    logger.warning("warn message")
+    logger.error("error message")
+    logger.critical("critical message")
+    logger.info(f"logger_app_name: {logger_app_name}")
