@@ -33,4 +33,8 @@ COINS_URL=https://raw.githubusercontent.com/KomodoPlatform/coins/master/coins
 - To test everything: `pytest -v`
 - To test a specific file: `pytest -v tests/test_file.py`
 
+### Source Data
+
+If you have access, you can get a well populated MM2.db file with:
+`rsync username@stats-api.atomicdex.io:/DB/43ec929fe30ee72be42c9162c56dde910a05e50d/MM2.db . --progress -v -r`
 
