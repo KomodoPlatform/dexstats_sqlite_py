@@ -1136,7 +1136,7 @@ class Utils:
 
 
 class DexAPI:
-    def __init__(self, config="mm2/MM2.json", protocol: str = "http", testing=False):
+    def __init__(self, config=const.MM2_JSON, protocol: str = "http", testing=False):
         ip = '127.0.0.1'
         port = 7783
         netid = 7777
@@ -1155,7 +1155,6 @@ class DexAPI:
         else:
             logger.error(f"Komodefi SDK config not found at {config}!")
             raise SystemExit(1)
-        self.mm2_ip = f'http://127.0.0.1:7783'
         self.testing = testing
         self.utils = Utils()
         self.files = Files(self.testing)
@@ -1231,4 +1230,3 @@ class DexAPI:
             return self.rpc("version").json()["result"]
         except:
             return "Error"
-    

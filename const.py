@@ -11,4 +11,5 @@ if API_PORT:
 COINS_URL = os.getenv('COINS_URL')
 COINS_CONFIG_URL = os.getenv('COINS_CONFIG_URL')
 MM2_DB_PATH = os.getenv('MM2_DB_PATH')
+MM2_JSON = os.getenv('MM2_JSON')
 SCRIPT_PATH = os.path.realpath(os.path.dirname(__file__))
