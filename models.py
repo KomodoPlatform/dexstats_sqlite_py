@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import time
 import json
 import sqlite3
@@ -134,13 +135,13 @@ class Cache:
         def gecko_data(self):
             return Gecko().get_gecko_data()
 
-        def pair_summaries(self, days: int = 1, clean=False):
+        def pair_summaries(self, summary_days: int = 1, pairs_days: int = 1, clean=False):
             try:
                 DB = SqliteDB(self.db_path)
                 DB = self.utils.get_db(self.db_path, self.DB)
-                pairs = DB.get_pairs(days)
-                logger.debug(f"Calculating pair summaries for {len(pairs)} pairs ({days} days)")
-                data = [Pair(i, self.db_path, self.testing, DB=DB).summary(days) for i in pairs]
+                pairs = DB.get_pairs(pairs_days)
+                logger.debug(f"Calculating {summary_days} day pair summaries for {len(pairs)} pairs traded in last {pairs_days} days")
+                data = [Pair(i, self.db_path, self.testing, DB=DB).summary(summary_days) for i in pairs]
                 if clean:
                     data = self.utils.clean_decimal_dict_list(data)
                 return data
@@ -211,8 +212,8 @@ class Cache:
             if data is not None:
                 return self.save(self.files.gecko_data, data)
 
-        def summary(self, days=1):
-            data = self.calc.pair_summaries(days, clean=True)
+        def summary(self, days: int = 1, pairs_days: int = 7):
+            data = self.calc.pair_summaries(days, pairs_days, clean=True)
             if data is not None:
                 return self.save(self.files.summary, data)
 
@@ -256,9 +257,7 @@ class Gecko:
             if coin_id not in ["na", "test-coin", ""]:
                 coins_info.update({coin: self.templates.gecko_info(coin_id)})
                 if native_coin not in coins_info:
-                    coins_info.update(
-                        {native_coin: self.templates.gecko_info(coin_id)}
-                    )
+                    coins_info.update({native_coin: self.templates.gecko_info(coin_id)})
         return coins_info
 
     def get_gecko_coins_dict(self, gecko_info: dict, coin_ids: list) -> dict:
@@ -273,10 +272,12 @@ class Gecko:
     def get_gecko_data(self):
         param_limit = 200
         coin_ids = self.get_gecko_coin_ids_list()
+        logger.info(f"Getting Gecko data for {len(coin_ids)} coins")
         coins_info = self.get_gecko_info_dict()
         gecko_coins = self.get_gecko_coins_dict(coins_info, coin_ids)
         coin_id_chunks = list(self.utils.get_chunks(coin_ids, param_limit))
         for chunk in coin_id_chunks:
+            logger.info(f"Getting Gecko data chunk {coin_id_chunks.index(chunk)+1}/{len(coin_id_chunks)}")
             chunk_ids = ",".join(chunk)
             try:
                 params = f"ids={chunk_ids}&vs_currencies=usd&include_market_cap=true"
@@ -1133,22 +1134,47 @@ class Utils:
         return "{:.8f}".format(Decimal(highest))
 
 
+
 class DexAPI:
-    def __init__(self, testing=False):
+    def __init__(self, config="mm2/MM2.json", protocol: str = "http", testing=False):
+        ip = '127.0.0.1'
+        port = 7783
+        netid = 7777
+        self.protocol = protocol
+        if os.path.isfile(config):
+            with open(config, "r") as f:
+                conf = json.load(f)
+            self.userpass = conf["rpc_password"]
+            if "rpc_ip" in conf:
+                ip = conf["rpc_ip"]
+            if "rpcport" in conf:
+                port = conf["rpcport"]
+            if "netid" in conf:
+                self.netid = conf["netid"]
+            self.mm2_ip = f"{self.protocol}://{ip}:{port}"
+        else:
+            logger.error(f"Komodefi SDK config not found at {config}!")
+            raise SystemExit(1)
+        self.mm2_ip = f'http://127.0.0.1:7783'
         self.testing = testing
         self.utils = Utils()
         self.files = Files(self.testing)
         self.templates = Templates()
         self.coins_config = self.utils.load_jsonfile(self.files.coins_config)
+        version = self.version
+        if version == "Error":
+            logger.warning(f"Komodefi SDK is not running at {self.mm2_ip}!")
+            raise SystemExit(1)
+        
 
     # tuple, string, string -> list
     # returning orderbook for given trading pair
     def orderbook(self, pair):
+        if isinstance(pair, str):
+            pair = pair.split("_")
+        base = pair[0]
+        quote = pair[1]
         try:
-            if isinstance(pair, str):
-                pair = pair.split("_")
-            base = pair[0]
-            quote = pair[1]
             if base not in self.coins_config or quote not in self.coins_config:
                 return self.templates.orderbook(base, quote, v2=True)
             if self.coins_config[base]["wallet_only"] or self.coins_config[quote]["wallet_only"]:
@@ -1158,25 +1184,51 @@ class DexAPI:
             return self.templates.orderbook(base, quote, v2=True)
 
         try:
-            mm2_host = "http://127.0.0.1:7783"
             params = {
-                "mmrpc": "2.0",
-                "method": "orderbook",
-                "params": {
-                    "base": pair[0],
-                    "rel": pair[1]
-                },
-                "id": 42
+                "base": base,
+                "rel": quote
             }
-            r = requests.post(mm2_host, json=params)
-            if "result" in json.loads(r.text):
+            r = self.rpc("orderbook", params, v2=True)
+            if "result" in r.json():
                 return json.loads(r.text)["result"]
-            if "error_type" in json.loads(r.text):
-                error = json.loads(r.text)['error_type']
+            if "error_type" in r.json():
+                error = r.json()['error_type']
                 logger.debug(f"Error in [DexAPI.orderbook] for {pair}: {error}")
             else:
-                logger.info(f"Error in [DexAPI.orderbook] for {pair}: {r.text}")
-            return self.templates.orderbook(base, quote, v2=True)
+                logger.info(f"Error in [DexAPI.orderbook] for {pair}: {r.json()}")
         except Exception as e:
             logger.error(f"{type(e)} Error in [DexAPI.orderbook] for {pair}: {e}")
             logger.info(f"{type(e)} Error in [DexAPI.orderbook] for {pair}: {r.text}")
+        return self.templates.orderbook(base, quote, v2=True)
+
+
+    def rpc(self, method, params=None, v2=False, wss=False):
+        try:
+            if not params:
+                params = {}
+            body = {}
+            if v2:
+                body.update({
+                    "mmrpc": "2.0",
+                    "params": params
+                })
+            elif params:
+                body.update(params)
+            body.update({
+                "userpass": self.userpass,
+                "method": method
+            })
+            return requests.post(self.mm2_ip, json.dumps(body))
+        except Exception as e:
+            logger.info(method)
+            logger.info(params)
+            logger.error(f"Error in rpc: {e}")
+            return {}
+
+    @property
+    def version(self):
+        try:
+            return self.rpc("version").json()["result"]
+        except:
+            return "Error"
+    
